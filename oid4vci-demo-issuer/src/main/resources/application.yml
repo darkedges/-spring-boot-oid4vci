@@ -1,0 +1,17 @@
+server:
+  port: 8092
+
+oid4vci:
+  issuer:
+    credential-issuer: "http://localhost:8092"
+    # Two configurations chosen to match oid4vp's existing demo data exactly (given_name/family_name;
+    # doctype org.iso.18013.5.1.mDL), for zero-friction interop with the sibling oid4vp project's demo
+    # Verifier/Wallet -- see the root README. The vct below matches oid4vp-demo-verifier's "demo"
+    # registration dcql-query vct_values exactly, so a credential issued here can be presented there
+    # without the verifier's DCQL evaluation rejecting it on vct mismatch.
+    credential-configurations-supported: >
+      {"UniversityDegreeCredential":{"format":"vc+sd-jwt",
+      "vct":"https://demo.oid4vp.example/employee_credential",
+      "claims":[{"path":["given_name"]},{"path":["family_name"],"mandatory":true}]},
+      "org.iso.18013.5.1.mDL":{"format":"mso_mdoc","doctype":"org.iso.18013.5.1.mDL",
+      "claims":[{"path":["org.iso.18013.5.1","given_name"]},{"path":["org.iso.18013.5.1","family_name"],"mandatory":true}]}}

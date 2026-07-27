@@ -1,0 +1,15 @@
+# Layers on top of docker-compose.yml to expose the demo behind Cloudflare, e.g.:
+#   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+# Point a Cloudflare Tunnel at these two hostnames -> localhost ports (see README: "Hosting behind
+# Cloudflare"). Update application-cloudflare.yml in oid4vci-demo-issuer first if you're using a different
+# domain than issuer.zkp.au.
+#
+# Overrides (not adds to) the base file's SPRING_PROFILES_ACTIVE=docker on the issuer: the "cloudflare"
+# profile replaces the docker-compose-internal credential-issuer with the public one (see
+# oid4vci-demo-issuer/src/main/resources/application-cloudflare.yml). The Wallet has no
+# application-cloudflare.yml at all — it needs no profile-specific config either way, since every URL it
+# calls (issuerUrl, verifierAuthorizeUrl) is a per-request parameter, not baked-in config.
+services:
+  issuer:
+    environment:
+      - SPRING_PROFILES_ACTIVE=cloudflare

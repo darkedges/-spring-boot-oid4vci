@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OID4VCI Demo Issuer</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #1b1f24;
+    --muted: #5b6472;
+    --border: #dde1e6;
+    --accent: #2f6fed;
+    --accent-text: #ffffff;
+    --mono-bg: #0f1115;
+    --mono-text: #d6e2ff;
+    --ok: #1a7f37;
+    --err: #cf222e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --panel: #1e2127;
+      --text: #e8eaed;
+      --muted: #9aa4b2;
+      --border: #30343c;
+      --mono-bg: #0a0b0d;
+      --mono-text: #cfe0ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.45;
+  }
+  header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
+  header p { margin: 0; color: var(--muted); font-size: .9rem; }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 1.5rem 2rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+  }
+  .panel h2 {
+    margin: 0 0 .75rem;
+    font-size: 1.05rem;
+  }
+  .row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  button {
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    border-radius: 6px;
+    padding: .55rem 1.1rem;
+    font-size: .9rem;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .badge {
+    display: inline-block;
+    font-size: .75rem;
+    font-weight: 600;
+    padding: .15rem .55rem;
+    border-radius: 999px;
+    background: rgba(47,111,237,.12);
+    color: var(--accent);
+  }
+  .config-list { display: flex; flex-direction: column; gap: .5rem; margin-top: .5rem; }
+  .config-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .5rem .75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: .85rem;
+  }
+  .config-item code { color: var(--muted); }
+  pre {
+    background: var(--mono-bg);
+    color: var(--mono-text);
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: .8rem;
+    margin: .75rem 0 0;
+  }
+  .hint { color: var(--muted); font-size: .85rem; margin-top: .5rem; }
+  .status { font-size: .85rem; margin-top: .5rem; }
+  .status.err { color: var(--err); }
+  .status.ok { color: var(--ok); }
+  .copy-row { display: flex; gap: .5rem; margin-top: .5rem; }
+  .copy-row input {
+    flex: 1;
+    font-family: monospace;
+    font-size: .78rem;
+    padding: .45rem .6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>OID4VCI Demo Issuer</h1>
+  <p id="issuerUrl">Credential Issuer</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Supported credential configurations</h2>
+    <div id="configs" class="config-list">
+      <span class="hint">Loading metadata…</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Create a demo Credential Offer</h2>
+    <p class="hint">
+      Seeds a single-use pre-authorized code (claims <code>given_name: Jane</code>, <code>family_name: Doe</code>)
+      and returns a Credential Offer for it, per the
+      <code>pre-authorized_code</code> grant. This is what a real wallet would scan as a QR code or deep link.
+    </p>
+    <div class="row">
+      <button id="createOffer">Create demo offer</button>
+      <span id="offerStatus" class="status"></span>
+    </div>
+
+    <div id="offerResult" style="display:none;">
+      <pre id="offerJson"></pre>
+      <div class="copy-row">
+        <input id="offerUri" readonly>
+        <button class="secondary" id="copyUri">Copy URI</button>
+      </div>
+      <p class="hint">
+        This demo's own Wallet app (<code>oid4vci-demo-wallet</code>) doesn't consume this exact offer object —
+        its "Obtain Credential(s)" button fetches a fresh one directly from this issuer's
+        <code>/demo/offer</code> endpoint when you click it. The offer above is shown so you can see (and copy)
+        exactly what a wallet receives, e.g. to paste into a different OID4VCI-compatible wallet.
+      </p>
+    </div>
+  </section>
+</main>
+
+<script>
+  const originUrl = window.location.origin;
+  document.getElementById('issuerUrl').textContent = originUrl;
+
+  async function loadMetadata() {
+    const el = document.getElementById('configs');
+    try {
+      const res = await fetch('/.well-known/openid-credential-issuer');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const meta = await res.json();
+      const configs = meta.credential_configurations_supported || {};
+      const ids = Object.keys(configs);
+      if (ids.length === 0) {
+        el.innerHTML = '<span class="hint">No configurations found.</span>';
+        return;
+      }
+      el.innerHTML = ids.map(id => {
+        const c = configs[id] || {};
+        const format = c.format || 'unknown';
+        return `<div class="config-item"><span><strong>${escapeHtml(id)}</strong></span><code>${escapeHtml(format)}</code></div>`;
+      }).join('');
+    } catch (e) {
+      el.innerHTML = `<span class="hint">Could not load metadata (${escapeHtml(e.message)}).</span>`;
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  document.getElementById('createOffer').addEventListener('click', async () => {
+    const status = document.getElementById('offerStatus');
+    const resultBox = document.getElementById('offerResult');
+    status.textContent = 'Creating offer…';
+    status.className = 'status';
+    resultBox.style.display = 'none';
+    try {
+      const res = await fetch('/demo/offer');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const offer = await res.json();
+      document.getElementById('offerJson').textContent = JSON.stringify(offer, null, 2);
+      const uri = 'openid-credential-offer://?credential_offer=' + encodeURIComponent(JSON.stringify(offer));
+      document.getElementById('offerUri').value = uri;
+      resultBox.style.display = 'block';
+      status.textContent = 'Offer created.';
+      status.className = 'status ok';
+    } catch (e) {
+      status.textContent = 'Failed to create offer: ' + e.message;
+      status.className = 'status err';
+    }
+  });
+
+  document.getElementById('copyUri').addEventListener('click', async () => {
+    const input = document.getElementById('offerUri');
+    input.select();
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch (e) {
+      document.execCommand('copy');
+    }
+  });
+
+  loadMetadata();
+</script>
+</body>
+</html>

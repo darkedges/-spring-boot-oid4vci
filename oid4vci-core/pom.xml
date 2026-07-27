@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vci</groupId>
+    <artifactId>oid4vci-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vci-core</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VCI Core</name>
+  <description>Format-agnostic OID4VCI 1.0 protocol model: Credential Offer, Credential Issuer Metadata,
+    Credential Configuration, Token/Nonce request-response, Credential Request/Response, Proof-of-Possession
+    JWT constants, error model. Reuses oid4vp-core's CredentialFormat and ClaimsPathPointer directly.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-test-fixtures</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

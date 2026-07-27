@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vci</groupId>
+    <artifactId>oid4vci-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vci-wallet-core</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VCI Wallet Core</name>
+  <description>Non-Spring Wallet orchestration: credential-offer parsing, pre-authorized_code token
+    exchange, nonce fetch, proof-of-possession JWT building, dispatching each raw Credential Response
+    into oid4vp-core's HeldCredential via the format modules' own parse() factories -- the interop bridge
+    to the sibling oid4vp project.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-format-sdjwt-vc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-format-mdoc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+    </dependency>
+
+    <!-- Test-scope only: lets this module's tests drive the real issuer-core services directly instead
+         of a real HTTP round trip, mirroring oid4vp-wallet-core's own test-scope dependency on
+         oid4vp-verifier-core for its build-then-verify tests. -->
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-issuer-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-test-fixtures</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

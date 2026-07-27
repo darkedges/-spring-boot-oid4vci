@@ -1,0 +1,26 @@
+# Layers a Cloudflare Tunnel connector onto the stack, e.g.:
+#   CLOUDFLARE_TUNNEL_TOKEN="<token>" docker compose \
+#     -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+#
+# Setup (one-time, in the Cloudflare dashboard — both domains must be on the same account):
+#   1. Zero Trust -> Networks -> Tunnels -> Create a tunnel -> Cloudflared connector -> name it, e.g.
+#      "oid4vci-demo" -> copy the token shown (this is CLOUDFLARE_TUNNEL_TOKEN below).
+#   2. Add two Public Hostname routes on that tunnel:
+#        issuer.zkp.au    -> HTTP -> issuer:8092
+#        vciwallet.zkp.au -> HTTP -> wallet:8093
+#      (service targets are the docker-compose service names, not localhost — cloudflared reaches them
+#      over the compose network, same as any other container-to-container call in this stack.)
+#   3. Save. No DNS records to add by hand — the dashboard flow creates the CNAMEs for you.
+#
+# Deliberately distinct hostnames from oid4vp's own tunnel (wallet.zkp.au / verify.irving.au): oid4vci's
+# Wallet does real issuance + presentation and isn't meant to run side-by-side with oid4vp-demo-wallet as
+# a second, separate wallet at the same address — see README: "Cross-repo interop".
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN to the token from the Cloudflare dashboard}
+    depends_on:
+      - issuer
+      - wallet

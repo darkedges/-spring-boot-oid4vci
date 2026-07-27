@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OID4VCI Demo Wallet</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #1b1f24;
+    --muted: #5b6472;
+    --border: #dde1e6;
+    --accent: #2f6fed;
+    --accent-text: #ffffff;
+    --mono-bg: #0f1115;
+    --mono-text: #d6e2ff;
+    --ok: #1a7f37;
+    --err: #cf222e;
+    --card: #fafbfc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --panel: #1e2127;
+      --text: #e8eaed;
+      --muted: #9aa4b2;
+      --border: #30343c;
+      --mono-bg: #0a0b0d;
+      --mono-text: #cfe0ff;
+      --card: #24272e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.45;
+  }
+  header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--border); }
+  header h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
+  header p { margin: 0; color: var(--muted); font-size: .9rem; }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 1.5rem 2rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+  }
+  .panel h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+  .row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  label { font-size: .8rem; color: var(--muted); display: block; margin-bottom: .25rem; }
+  input[type=text] {
+    width: 100%;
+    font-family: monospace;
+    font-size: .85rem;
+    padding: .5rem .65rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .field { flex: 1; min-width: 260px; }
+  button {
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    border-radius: 6px;
+    padding: .55rem 1.1rem;
+    font-size: .9rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .status { font-size: .85rem; margin-top: .6rem; }
+  .status.err { color: var(--err); }
+  .status.ok { color: var(--ok); }
+  .badge {
+    display: inline-block;
+    font-size: .72rem;
+    font-weight: 600;
+    padding: .15rem .55rem;
+    border-radius: 999px;
+    background: rgba(47,111,237,.12);
+    color: var(--accent);
+  }
+  .cred-list { display: flex; flex-direction: column; gap: .75rem; margin-top: .75rem; }
+  .cred-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+  }
+  .cred-card .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+  table.claims { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.claims td { padding: .25rem .4rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.claims td.key { color: var(--muted); width: 40%; font-family: monospace; }
+  table.claims td.val { font-family: monospace; word-break: break-all; }
+  pre {
+    background: var(--mono-bg);
+    color: var(--mono-text);
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: .8rem;
+    margin: .75rem 0 0;
+  }
+  .hint { color: var(--muted); font-size: .85rem; }
+  .empty { color: var(--muted); font-size: .85rem; font-style: italic; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OID4VCI Demo Wallet</h1>
+  <p id="walletUrl">Wallet</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Obtain credentials</h2>
+    <p class="hint">
+      Drives the whole pre-authorized_code flow server-side: fetches the issuer's metadata and a fresh demo
+      offer, exchanges the code for an access token, builds real proofs of possession, and requests every
+      credential configuration the issuer offers.
+    </p>
+    <div class="row" style="margin-top:.75rem;">
+      <div class="field">
+        <label for="issuerUrl">Issuer URL</label>
+        <input type="text" id="issuerUrl" value="http://localhost:8092">
+      </div>
+      <button id="obtainBtn" style="align-self:flex-end;">Obtain credential(s)</button>
+    </div>
+    <p class="hint">
+      This call happens server-side, from inside the wallet's own JVM/container — not from your browser.
+      Running under <code>docker compose</code>? Use the issuer's <strong>compose service name</strong>
+      (e.g. <code>http://issuer:8092</code>), not <code>localhost</code>: the wallet container can't reach
+      the issuer container via <code>localhost</code>, only your host's browser can.
+    </p>
+    <div id="obtainStatus" class="status"></div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between;">
+      <h2 style="margin:0;">Held credentials</h2>
+      <button class="secondary" id="refreshBtn">Refresh</button>
+    </div>
+    <div id="credentials" class="cred-list">
+      <span class="empty">No credentials obtained yet.</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Present to a Verifier</h2>
+    <p class="hint">
+      Fetches an OpenID4VP Authorization Request from the URL below, evaluates its DCQL query against the
+      credentials held above, and posts the resulting <code>vp_token</code> back to the verifier (e.g. a
+      running <code>oid4vp-demo-verifier</code>).
+    </p>
+    <div class="row" style="margin-top:.75rem;">
+      <div class="field">
+        <label for="verifierUrl">Verifier authorize URL</label>
+        <input type="text" id="verifierUrl" value="http://localhost:8090/oid4vp/authorize/demo">
+      </div>
+      <button id="presentBtn" style="align-self:flex-end;">Present</button>
+    </div>
+    <p class="hint">
+      This call also happens server-side, from inside the wallet's own JVM/container. Running under
+      <code>docker compose</code>? <code>localhost</code> refers to the container itself, not your host, so
+      it won't reach a verifier running there. Use <code>http://host.docker.internal:8090/oid4vp/authorize/demo</code>
+      if <code>oid4vp-demo-verifier</code> is running directly on the host, or join its compose network and
+      use its service name if it's containerized too.
+    </p>
+    <div id="presentStatus" class="status"></div>
+    <pre id="presentResult" style="display:none;"></pre>
+  </section>
+</main>
+
+<script>
+  document.getElementById('walletUrl').textContent = window.location.origin;
+
+  // Known public hostnames this wallet is deployed under, mapped to their paired issuer's default URL --
+  // see docker-compose.cloudflare.yml / oid4vci-demo-issuer's application-cloudflare.yml.
+  const KNOWN_ISSUER_DEFAULTS = {
+    'vciwallet.zkp.au': 'https://issuer.zkp.au'
+  };
+  const knownIssuer = KNOWN_ISSUER_DEFAULTS[window.location.hostname];
+  if (knownIssuer) {
+    document.getElementById('issuerUrl').value = knownIssuer;
+  }
+
+  // Known public hostnames this wallet is deployed under, mapped to a paired Verifier's authorize URL for
+  // the cross-repo interop demo -- see README: "Cross-repo interop". verify.irving.au is oid4vp-demo-verifier's
+  // own public deployment (paired there with wallet.zkp.au's self-issuing demo wallet, not this one).
+  const KNOWN_VERIFIER_DEFAULTS = {
+    'vciwallet.zkp.au': 'https://verify.irving.au/oid4vp/authorize/demo'
+  };
+  const knownVerifier = KNOWN_VERIFIER_DEFAULTS[window.location.hostname];
+  if (knownVerifier) {
+    document.getElementById('verifierUrl').value = knownVerifier;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function flattenClaims(node, prefix, rows) {
+    if (node && typeof node === 'object' && !Array.isArray(node)) {
+      const keys = Object.keys(node);
+      if (keys.length === 0) {
+        rows.push([prefix || '(empty)', '{}']);
+        return;
+      }
+      for (const k of keys) {
+        flattenClaims(node[k], prefix ? prefix + '.' + k : k, rows);
+      }
+    } else if (Array.isArray(node)) {
+      rows.push([prefix, JSON.stringify(node)]);
+    } else {
+      rows.push([prefix, String(node)]);
+    }
+  }
+
+  function renderCredentials(list) {
+    const el = document.getElementById('credentials');
+    if (!list || list.length === 0) {
+      el.innerHTML = '<span class="empty">No credentials obtained yet.</span>';
+      return;
+    }
+    el.innerHTML = list.map(cred => {
+      const rows = [];
+      flattenClaims(cred.claims, '', rows);
+      const rowsHtml = rows.map(([k, v]) =>
+        `<tr><td class="key">${escapeHtml(k)}</td><td class="val">${escapeHtml(v)}</td></tr>`
+      ).join('');
+      return `<div class="cred-card">
+        <div class="head"><span class="badge">${escapeHtml(cred.format)}</span></div>
+        <table class="claims">${rowsHtml}</table>
+      </div>`;
+    }).join('');
+  }
+
+  async function loadCredentials() {
+    try {
+      const res = await fetch('/wallet/credentials');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      renderCredentials(await res.json());
+    } catch (e) {
+      document.getElementById('credentials').innerHTML =
+        `<span class="empty">Could not load credentials (${escapeHtml(e.message)}).</span>`;
+    }
+  }
+
+  document.getElementById('obtainBtn').addEventListener('click', async () => {
+    const status = document.getElementById('obtainStatus');
+    const issuerUrl = document.getElementById('issuerUrl').value.trim();
+    if (!issuerUrl) return;
+    status.textContent = 'Obtaining credential(s)…';
+    status.className = 'status';
+    try {
+      const res = await fetch('/wallet/obtain?issuerUrl=' + encodeURIComponent(issuerUrl), { method: 'POST' });
+      const body = await res.text();
+      if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + body);
+      const parsed = JSON.parse(body);
+      const formats = (parsed.obtained_formats || []).join(', ') || '(none)';
+      status.textContent = 'Obtained: ' + formats;
+      status.className = 'status ok';
+      await loadCredentials();
+    } catch (e) {
+      status.textContent = 'Failed to obtain credentials: ' + e.message;
+      status.className = 'status err';
+    }
+  });
+
+  document.getElementById('refreshBtn').addEventListener('click', loadCredentials);
+
+  document.getElementById('presentBtn').addEventListener('click', async () => {
+    const status = document.getElementById('presentStatus');
+    const resultBox = document.getElementById('presentResult');
+    const verifierAuthorizeUrl = document.getElementById('verifierUrl').value.trim();
+    if (!verifierAuthorizeUrl) return;
+    status.textContent = 'Presenting…';
+    status.className = 'status';
+    resultBox.style.display = 'none';
+    try {
+      const res = await fetch('/present', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verifierAuthorizeUrl })
+      });
+      const body = await res.text();
+      let pretty = body;
+      try { pretty = JSON.stringify(JSON.parse(body), null, 2); } catch (_) {}
+      resultBox.textContent = pretty;
+      resultBox.style.display = 'block';
+      if (res.ok) {
+        status.textContent = 'Verifier accepted the presentation.';
+        status.className = 'status ok';
+      } else {
+        status.textContent = 'Verifier responded with HTTP ' + res.status + '.';
+        status.className = 'status err';
+      }
+    } catch (e) {
+      status.textContent = 'Failed to present: ' + e.message;
+      status.className = 'status err';
+    }
+  });
+
+  loadCredentials();
+</script>
+</body>
+</html>

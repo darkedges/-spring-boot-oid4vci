@@ -1,0 +1,8 @@
+# Activated via SPRING_PROFILES_ACTIVE=cloudflare — see docker-compose.cloudflare.yml and the "Hosting
+# behind Cloudflare" section of README.md. credential-issuer becomes the public HTTPS domain rather than
+# a docker-compose-internal service name, since this issuer is meant to be reachable by any Wallet on the
+# public internet, not just containers on this compose network — same reasoning as oid4vp's own
+# application-cloudflare.yml files.
+oid4vci:
+  issuer:
+    credential-issuer: "https://issuer.zkp.au"

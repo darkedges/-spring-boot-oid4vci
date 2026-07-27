@@ -1,0 +1,128 @@
+package com.darkedges.oid4vci.issuer;
+
+import com.darkedges.oid4vci.core.error.Oid4vciErrorCode;
+import com.darkedges.oid4vci.core.error.Oid4vciException;
+import com.darkedges.oid4vci.core.token.TokenResponse;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.ECDSASigner;
+import com.nimbusds.jose.crypto.ECDSAVerifier;
+import com.nimbusds.jose.jwk.ECKey;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+
+import java.text.ParseException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * Mints and verifies the Issuer's own self-signed ES256 access tokens (plain Nimbus {@code SignedJWT}/
+ * {@code ECDSASigner}, consistent with this project's "Nimbus directly" convention rather than a Spring
+ * {@code JwtEncoder} abstraction). Minting is business logic (the Issuer is its own tiny Authorization
+ * Server for the pre-authorized_code grant); {@link #verify} exists for this module's own in-process
+ * tests and any non-Spring consumer — the real Credential Endpoint (Phase 5+) verifies via Spring
+ * Security's built-in {@code oauth2ResourceServer()}/{@code JwtDecoder} instead, per the project README.
+ */
+public final class AccessTokenService {
+
+    private static final String CREDENTIAL_CONFIGURATION_IDS_CLAIM = "credential_configuration_ids";
+
+    private final ECKey issuerKey;
+    private final String issuer;
+    private final Duration ttl;
+    private final Clock clock;
+
+    public AccessTokenService(ECKey issuerKey, String issuer, Duration ttl, Clock clock) {
+        this.issuerKey = issuerKey;
+        this.issuer = issuer;
+        this.ttl = ttl;
+        this.clock = clock;
+    }
+
+    /**
+     * Mints a token and returns it alongside the fresh {@code subject} identifier embedded in it.
+     * {@link PreAuthorizedCodeSession#claims()} is deliberately NOT embedded in the token itself (that
+     * would bloat/leak claim data into a bearer credential that may be logged, cached, or otherwise
+     * handled less carefully than the credential it's only meant to authorize issuing) — the caller
+     * (the real Credential Endpoint's web layer) is expected to separately persist
+     * {@code session.claims()} keyed by the returned {@code subject}, e.g. via
+     * {@link IssuedAccessTokenClaimsStore}, and look them up again once the token comes back on a
+     * Credential Request.
+     */
+    public IssuedAccessToken issue(PreAuthorizedCodeSession session) {
+        Instant now = clock.instant();
+        String subject = UUID.randomUUID().toString();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(issuer)
+                .subject(subject)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(ttl)))
+                .jwtID(UUID.randomUUID().toString())
+                .claim(CREDENTIAL_CONFIGURATION_IDS_CLAIM, session.credentialConfigurationIds())
+                .build();
+
+        JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.ES256).keyID(issuerKey.getKeyID()).build();
+        SignedJWT jwt = new SignedJWT(header, claims);
+        try {
+            jwt.sign(new ECDSASigner(issuerKey));
+        } catch (JOSEException e) {
+            throw new IllegalStateException("failed to sign access token", e);
+        }
+
+        TokenResponse response = new TokenResponse(jwt.serialize(), "Bearer", Optional.of(ttl.toSeconds()), Optional.empty());
+        return new IssuedAccessToken(response, subject);
+    }
+
+    /** @throws Oid4vciException with {@link Oid4vciErrorCode#INVALID_TOKEN} if the token's signature is
+     * invalid or it has expired. */
+    public AccessTokenClaims verify(String accessToken) {
+        SignedJWT jwt;
+        try {
+            jwt = SignedJWT.parse(accessToken);
+        } catch (ParseException e) {
+            throw new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "access token is not a well-formed JWT", e);
+        }
+
+        try {
+            if (!jwt.verify(new ECDSAVerifier(issuerKey.toPublicJWK()))) {
+                throw new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "access token signature verification failed");
+            }
+        } catch (JOSEException e) {
+            throw new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "access token signature verification failed", e);
+        }
+
+        JWTClaimsSet claims;
+        try {
+            claims = jwt.getJWTClaimsSet();
+        } catch (ParseException e) {
+            throw new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "access token claims could not be parsed", e);
+        }
+
+        if (claims.getExpirationTime() == null || claims.getExpirationTime().toInstant().isBefore(clock.instant())) {
+            throw new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "access token has expired");
+        }
+
+        List<String> configurationIds = new ArrayList<>();
+        try {
+            List<Object> raw = claims.getListClaim(CREDENTIAL_CONFIGURATION_IDS_CLAIM);
+            if (raw != null) {
+                raw.forEach(v -> configurationIds.add(String.valueOf(v)));
+            }
+        } catch (ParseException e) {
+            throw new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "access token credential_configuration_ids claim is malformed", e);
+        }
+
+        return new AccessTokenClaims(claims.getSubject(), List.copyOf(configurationIds));
+    }
+
+    public record AccessTokenClaims(String subject, List<String> credentialConfigurationIds) {}
+
+    public record IssuedAccessToken(TokenResponse tokenResponse, String subject) {}
+}

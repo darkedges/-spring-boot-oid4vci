@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vci</groupId>
+    <artifactId>oid4vci-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vci-demo-wallet</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VCI Demo Wallet</name>
+  <description>Runnable demo: a Spring Boot app driving oid4vci-wallet-core's full pre-authorized_code
+    flow over real HTTP against oid4vci-demo-issuer. Also depends on oid4vp-wallet-core, so a credential
+    obtained here can be presented directly against a separately-running oid4vp-demo-verifier -- no
+    Spring Security here at all, same reasoning as oid4vp-demo-wallet: this role needs no
+    AuthenticationProvider, it's just an HTTP client.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-wallet-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-wallet-core</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>oid4vci-demo-wallet</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

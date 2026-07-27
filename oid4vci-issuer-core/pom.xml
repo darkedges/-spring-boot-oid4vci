@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vci</groupId>
+    <artifactId>oid4vci-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vci-issuer-core</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VCI Issuer Core</name>
+  <description>Non-Spring Issuer orchestration: pre-authorized-code bookkeeping, nonce issuance,
+    access-token minting/verification, proof-of-possession verification, per-format credential building
+    (reusing oid4vp-format-sdjwt-vc/oid4vp-format-mdoc's issuance-side building blocks directly).</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-format-sdjwt-vc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-format-mdoc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-test-fixtures</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

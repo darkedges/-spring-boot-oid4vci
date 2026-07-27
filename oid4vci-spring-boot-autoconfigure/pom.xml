@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vci</groupId>
+    <artifactId>oid4vci-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vci-spring-boot-autoconfigure</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VCI Spring Boot Autoconfigure</name>
+  <description>Spring Boot auto-configuration: oid4vci.issuer.* properties, default in-memory stores, a
+    default JwtDecoder routed through this issuer's own JWKS endpoint, and auto-registered controller
+    beans from oid4vci-issuer-web. Does not auto-apply oauth2ResourceServer() to any HttpSecurity, and
+    deliberately never supplies the issuer's own signing key material -- both stay the consuming
+    application's job, same restraint as oid4vp's own autoconfiguration.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-issuer-web</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-configuration-processor</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>com.darkedges.oid4vci</groupId>
+      <artifactId>oid4vci-test-fixtures</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

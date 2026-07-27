@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.darkedges.oid4vci</groupId>
+  <artifactId>oid4vci-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>OpenID4VCI Parent</name>
+  <description>Java implementation of OpenID for Verifiable Credential Issuance (OID4VCI) 1.0, sharing the
+    Spring configuration conventions and credential-format modules (SD-JWT VC, mso_mdoc) of the sibling
+    OpenID4VP project.</description>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <spring-boot.version>4.1.0</spring-boot.version>
+    <!-- Must match the version oid4vp's own jars were compiled against exactly, since JOSE objects
+         (SignedJWT, ECKey, ...) cross the module boundary between oid4vci and the reused oid4vp
+         format modules. -->
+    <nimbus-jose-jwt.version>10.9.1</nimbus-jose-jwt.version>
+    <junit-bom.version>5.13.1</junit-bom.version>
+    <assertj.version>3.27.6</assertj.version>
+    <snakeyaml.version>2.5</snakeyaml.version>
+    <!-- See oid4vp's own pom.xml for the CVE-2026-54515 rationale; carried forward here since
+         spring-boot.version is the same and would otherwise pull in the same vulnerable version. -->
+    <jackson-databind.version>2.21.5</jackson-databind.version>
+
+    <!-- The sibling reactor's own version. Its artifacts are SNAPSHOT-only in the local ~/.m2 (no
+         shared Nexus); run `mvn -q install -DskipTests` in oid4vp before building this reactor
+         for the first time, or after any oid4vp change. See README.md. -->
+    <oid4vp.version>0.1.0-SNAPSHOT</oid4vp.version>
+  </properties>
+
+  <modules>
+    <module>oid4vci-core</module>
+    <module>oid4vci-test-fixtures</module>
+    <module>oid4vci-issuer-core</module>
+    <module>oid4vci-wallet-core</module>
+    <module>oid4vci-issuer-web</module>
+    <module>oid4vci-spring-boot-autoconfigure</module>
+    <module>oid4vci-demo-issuer</module>
+    <module>oid4vci-demo-wallet</module>
+  </modules>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson-databind.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>com.nimbusds</groupId>
+        <artifactId>nimbus-jose-jwt</artifactId>
+        <version>${nimbus-jose-jwt.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.assertj</groupId>
+        <artifactId>assertj-core</artifactId>
+        <version>${assertj.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.yaml</groupId>
+        <artifactId>snakeyaml</artifactId>
+        <version>${snakeyaml.version}</version>
+      </dependency>
+
+      <!-- Sibling reactor's artifacts (see oid4vp.version above). -->
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vp-core</artifactId>
+        <version>${oid4vp.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vp-format-sdjwt-vc</artifactId>
+        <version>${oid4vp.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vp-format-mdoc</artifactId>
+        <version>${oid4vp.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vp-wallet-core</artifactId>
+        <version>${oid4vp.version}</version>
+      </dependency>
+
+      <!-- This reactor's own artifacts. -->
+      <dependency>
+        <groupId>com.darkedges.oid4vci</groupId>
+        <artifactId>oid4vci-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vci</groupId>
+        <artifactId>oid4vci-test-fixtures</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vci</groupId>
+        <artifactId>oid4vci-issuer-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vci</groupId>
+        <artifactId>oid4vci-wallet-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vci</groupId>
+        <artifactId>oid4vci-issuer-web</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vci</groupId>
+        <artifactId>oid4vci-spring-boot-autoconfigure</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <configuration>
+            <release>${maven.compiler.release}</release>
+            <parameters>true</parameters>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+        </plugin>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <version>${spring-boot.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

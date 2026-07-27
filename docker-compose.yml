@@ -1,0 +1,25 @@
+# Requires the jars to be built first: `mvn install -DskipTests` from the repo root (after the sibling
+# oid4vp reactor has been installed into ~/.m2 — see README: "Prerequisites").
+# Then: `docker compose up --build`.
+#
+# Only oid4vci's own two apps live here, same scope as oid4vp's own docker-compose.yml (just its Wallet +
+# Verifier) — presenting an obtained credential doesn't need a Verifier baked into this stack at all: the
+# Wallet's /present endpoint takes the Verifier's authorize URL as a per-request parameter (see README:
+# "Cross-repo interop"), so it can target a locally-run oid4vp-demo-verifier, oid4vp's own docker-compose
+# stack, or a publicly-hosted one (e.g. verify.irving.au) equally well, with zero config here either way.
+services:
+  issuer:
+    build:
+      context: ./oid4vci-demo-issuer
+    ports:
+      - "8092:8092"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  wallet:
+    build:
+      context: ./oid4vci-demo-wallet
+    ports:
+      - "8093:8093"
+    depends_on:
+      - issuer
