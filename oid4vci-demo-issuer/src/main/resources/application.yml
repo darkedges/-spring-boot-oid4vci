@@ -33,6 +33,15 @@ oid4vci:
       "claims":[{"path":["given_name"]},{"path":["family_name"],"mandatory":true}],
       "proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},
       "cryptographic_binding_methods_supported":["jwk"]},
+      "PassportCredential":{"format":"dc+sd-jwt",
+      "vct":"/vct/PassportCredential","scope":"PassportCredential",
+      "claims":[{"path":["given_name"]},{"path":["family_name"],"mandatory":true},
+      {"path":["birth_date"],"mandatory":true},{"path":["document_number"],"mandatory":true},
+      {"path":["nationality"],"mandatory":true},{"path":["issuing_state"],"mandatory":true},
+      {"path":["expiry_date"],"mandatory":true},{"path":["assurance_level"],"mandatory":true},
+      {"path":["evidence"],"mandatory":true}],
+      "proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},
+      "cryptographic_binding_methods_supported":["jwk"]},
       "org.iso.18013.5.1.mDL":{"format":"mso_mdoc","doctype":"org.iso.18013.5.1.mDL","scope":"org.iso.18013.5.1.mDL",
       "claims":[{"path":["org.iso.18013.5.1","given_name"]},{"path":["org.iso.18013.5.1","family_name"],"mandatory":true}],
       "proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},
@@ -57,3 +66,19 @@ oid4vci:
     # here first, replacing the iat/jti-only replay defense with a server-issued nonce.
     attestation-challenge-endpoint-path: "/challenge"
 
+# The identity-proofing flow (see ProofingController): a Wallet starts a session, the user proves who
+# they are in the proofing app, that app's backend reports the verified result here server-to-server,
+# and the Wallet collects a Credential Offer carrying claims from the actual passport.
+demo:
+  proofing:
+    # Deliberately empty here, and read from the environment. This secret is the only thing standing
+    # between the result endpoint and anyone able to reach this host minting a credential that asserts
+    # any identity they choose, so it must not be a value that ships in a repository -- unlike the
+    # throwaway Wallet Provider public key above, which is public by nature. Unset means the endpoint
+    # refuses every call rather than accepting all of them.
+    callback-secret: ${PROOFING_CALLBACK_SECRET:}
+    # Long enough to scan an MRZ, hold a phone against a chip and pass a liveness challenge without
+    # rushing; short enough that an abandoned session holding a Credential Offer does not linger.
+    session-ttl: 15m
+    pre-authorized-code-ttl: 10m
+    credential-configuration-id: PassportCredential

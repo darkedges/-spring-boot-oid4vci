@@ -25,6 +25,13 @@ import org.springframework.security.web.SecurityFilterChain;
  * against the presented token, and the proof key's thumbprint against the token's {@code cnf.jkt}) before
  * the Credential Endpoint ever runs.
  *
+ * <p>The {@code /proofing/**} endpoints (see {@code ProofingController}) are all permitted through
+ * this chain, but they are not all open: {@code POST /proofing/result} authenticates its caller
+ * against a shared secret in the controller itself, because the proofing service holds no bearer
+ * token this resource server could validate. Listing it here lets it reach that check instead of
+ * being turned away with a token challenge it can never answer — it is not a decision that the
+ * endpoint needs no authentication.
+ *
  * <p>{@code /error} must also be in the permitAll list. Any error a public endpoint hits (a 406 from
  * content negotiation, a 500, ...) makes the servlet container re-dispatch the request internally to
  * Spring Boot's {@code BasicErrorController} at {@code /error}; Spring Security re-evaluates authorization
@@ -45,8 +52,21 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/.well-known/**", "/credential-offer/**", "/authorize", "/par", "/token", "/nonce",
-                                "/challenge", "/jwks", "/vct/**", "/demo/**", "/", "/index.html", "/error")
+                                "/challenge", "/jwks", "/vct/**", "/demo/**", "/", "/index.html", "/error",
+                                // The Wallet's two calls. Starting a session asserts nothing, and
+                                // collecting an offer is guarded by the retrieval secret issued at the
+                                // start rather than by this filter chain -- there is no user identity
+                                // here to authenticate against, only a bearer of that secret.
+                                "/proofing/session", "/proofing/session/**")
                         .permitAll()
+                        // Deliberately NOT listed above, and deliberately not under /demo/**, which is
+                        // permitAll wholesale: POST /proofing/result is what decides the contents of an
+                        // issued credential. Unauthenticated, it is claim injection -- anyone who could
+                        // reach the host could mint a credential asserting any identity. It
+                        // authenticates itself against a shared secret in ProofingController, so this
+                        // chain must let it through to that check rather than to a bearer-token
+                        // challenge it can never satisfy.
+                        .requestMatchers("/proofing/result").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> {})
