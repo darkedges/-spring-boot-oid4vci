@@ -61,10 +61,14 @@ class ProofingControllerTest {
     }
 
     private static MockHttpServletRequest servletRequest() {
+        return servletRequestFrom("https", "issuer.example.org", 443);
+    }
+
+    private static MockHttpServletRequest servletRequestFrom(String scheme, String host, int port) {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setScheme("https");
-        request.setServerName("issuer.example.org");
-        request.setServerPort(443);
+        request.setScheme(scheme);
+        request.setServerName(host);
+        request.setServerPort(port);
         return request;
     }
 
@@ -134,7 +138,7 @@ class ProofingControllerTest {
 
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
         JsonNode polled = MAPPER.readTree(
-                controller.pollSession(sessionId, secretFor(created)).getBody());
+                controller.pollSession(sessionId, secretFor(created), servletRequest()).getBody());
 
         assertThat(polled.get("status").asText()).isEqualTo("ready");
         JsonNode offer = polled.get("credential_offer");
@@ -151,14 +155,35 @@ class ProofingControllerTest {
     }
 
     @Test
+    void addressesTheOfferAsTheWalletReachedThisIssuer() throws Exception {
+        // The two callers arrive at different addresses, which is the normal deployed case: the
+        // proofing service reaches this issuer over the internal network, the Wallet over the public
+        // hostname. credential_issuer must be the Wallet's, since the Wallet is what has to resolve
+        // it -- taking it from the callback would hand a phone an in-cluster name it cannot reach.
+        //
+        // Every other test here used one address for both, so this passed locally while being wrong.
+        String created = controller.createSession();
+        String sessionId = MAPPER.readTree(created).get("session_id").asText();
+
+        controller.receiveResult(
+                SECRET, passingResultFor(sessionId), servletRequestFrom("http", "issuer.internal", 8092));
+        JsonNode offer = MAPPER.readTree(controller
+                        .pollSession(sessionId, secretFor(created), servletRequestFrom("https", "issuer.zkp.au", 443))
+                        .getBody())
+                .get("credential_offer");
+
+        assertThat(offer.get("credential_issuer").asText()).isEqualTo("https://issuer.zkp.au");
+    }
+
+    @Test
     void deliversTheOfferAsJsonRatherThanAnEncodedString() throws Exception {
-        // The offer is stored serialized. Splicing that string into the response would hand the Wallet
-        // a JSON string containing JSON, which its parser accepts and then fails to navigate.
+        // Built as a node, not spliced in as text: handing the Wallet a JSON string containing JSON
+        // is something its parser accepts and then fails to navigate.
         String created = controller.createSession();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
 
-        JsonNode offer = MAPPER.readTree(controller.pollSession(sessionId, secretFor(created)).getBody())
+        JsonNode offer = MAPPER.readTree(controller.pollSession(sessionId, secretFor(created), servletRequest()).getBody())
                 .get("credential_offer");
 
         assertThat(offer.isObject()).isTrue();
@@ -171,7 +196,7 @@ class ProofingControllerTest {
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
 
         // An app that hijacked the deep-link scheme holds the id and nothing else.
-        ResponseEntity<String> response = controller.pollSession(sessionId, "guessed");
+        ResponseEntity<String> response = controller.pollSession(sessionId, "guessed", servletRequest());
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getBody()).doesNotContain("credential_offer");
@@ -184,8 +209,8 @@ class ProofingControllerTest {
         String created = controller.createSession();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
 
-        ResponseEntity<String> wrongSecret = controller.pollSession(sessionId, "guessed");
-        ResponseEntity<String> unknownId = controller.pollSession("no-such-session", "guessed");
+        ResponseEntity<String> wrongSecret = controller.pollSession(sessionId, "guessed", servletRequest());
+        ResponseEntity<String> unknownId = controller.pollSession("no-such-session", "guessed", servletRequest());
 
         assertThat(wrongSecret.getStatusCode()).isEqualTo(unknownId.getStatusCode());
         assertThat(wrongSecret.getBody()).isEqualTo(unknownId.getBody());
@@ -202,7 +227,7 @@ class ProofingControllerTest {
                 true, false, true, true, true, true, true, true);
 
         controller.receiveResult(SECRET, failed, servletRequest());
-        JsonNode polled = MAPPER.readTree(controller.pollSession(sessionId, secretFor(created)).getBody());
+        JsonNode polled = MAPPER.readTree(controller.pollSession(sessionId, secretFor(created), servletRequest()).getBody());
 
         assertThat(polled.get("status").asText()).isEqualTo("failed");
         assertThat(polled.has("credential_offer")).isFalse();
@@ -220,7 +245,7 @@ class ProofingControllerTest {
 
         controller.receiveResult(SECRET, deviceSuppliedFace, servletRequest());
 
-        assertThat(MAPPER.readTree(controller.pollSession(sessionId, secretFor(created)).getBody())
+        assertThat(MAPPER.readTree(controller.pollSession(sessionId, secretFor(created), servletRequest()).getBody())
                 .get("status").asText()).isEqualTo("failed");
     }
 
@@ -236,7 +261,7 @@ class ProofingControllerTest {
 
         controller.receiveResult(SECRET, unknownChain, servletRequest());
 
-        assertThat(MAPPER.readTree(controller.pollSession(sessionId, secretFor(created)).getBody())
+        assertThat(MAPPER.readTree(controller.pollSession(sessionId, secretFor(created), servletRequest()).getBody())
                 .get("status").asText()).isEqualTo("failed");
     }
 
@@ -287,7 +312,7 @@ class ProofingControllerTest {
 
         controller.receiveResult(SECRET, mononymous, servletRequest());
 
-        assertThat(MAPPER.readTree(controller.pollSession(sessionId, secretFor(created)).getBody())
+        assertThat(MAPPER.readTree(controller.pollSession(sessionId, secretFor(created), servletRequest()).getBody())
                 .get("status").asText()).isEqualTo("ready");
     }
 

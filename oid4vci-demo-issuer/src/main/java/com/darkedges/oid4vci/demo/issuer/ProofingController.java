@@ -176,13 +176,12 @@ public class ProofingController {
                 claims,
                 now.plus(properties.getPreAuthorizedCodeTtl())));
 
-        CredentialOffer offer = new CredentialOffer(
-                metadata.credentialIssuer(),
-                List.of(configurationId),
-                Optional.of(new Grants(Optional.empty(),
-                        Optional.of(new PreAuthorizedCodeGrant(code, Optional.empty(), Optional.empty())))));
-
-        sessionStore.save(session.ready(CredentialOfferWriter.write(offer).toString()));
+        // The code is stored, not a built offer. An offer names its credential_issuer, and this
+        // issuer takes that from the address the caller used -- so building one here would stamp it
+        // with however the *proofing service* reached this endpoint (an in-cluster name, a Docker
+        // alias, a LAN address) and hand the Wallet an issuer it cannot resolve. It is built at
+        // collection instead, addressed as the Wallet itself arrived.
+        sessionStore.save(session.ready(code, configurationId));
         // The identity itself is never logged -- see the proofing service's own logging policy. That a
         // session completed is operationally useful; who it was about is not.
         log.info("Proofing session {} is ready to collect", session.id());
@@ -203,7 +202,8 @@ public class ProofingController {
             // it, but only from a build configured to retain parameter names, and when that silently
             // stops being true the endpoint throws at runtime rather than failing to compile.
             @PathVariable("id") String id,
-            @RequestParam(name = "secret", required = false) String secret) {
+            @RequestParam(name = "secret", required = false) String secret,
+            HttpServletRequest servletRequest) {
 
         Instant now = clock.instant();
         Optional<ProofingSession> found = sessionStore.find(id, now);
@@ -221,14 +221,21 @@ public class ProofingController {
         body.put("status", session.status().name().toLowerCase(Locale.ROOT));
         session.failureReason().ifPresent(reason -> body.put("reason", reason));
         if (session.status() == ProofingSession.Status.READY) {
-            // Re-parsed rather than spliced in as text: the offer is stored serialized, and embedding
-            // that string directly would deliver it to the Wallet double-encoded as a JSON string.
+            // Built here, from this request. credential_issuer must be the address the Wallet
+            // actually reached, which is knowable only now -- see ProofingSession's Javadoc.
+            String configurationId = session.credentialConfigurationId().orElseThrow();
+            CredentialIssuerMetadata metadata = template.resolve(RequestBaseUrl.resolve(servletRequest));
+            CredentialOffer offer = new CredentialOffer(
+                    metadata.credentialIssuer(),
+                    List.of(configurationId),
+                    Optional.of(new Grants(Optional.empty(), Optional.of(new PreAuthorizedCodeGrant(
+                            session.preAuthorizedCode().orElseThrow(), Optional.empty(), Optional.empty())))));
             try {
-                body.set("credential_offer", MAPPER.readTree(session.credentialOffer().orElseThrow()));
+                body.set("credential_offer", MAPPER.readTree(CredentialOfferWriter.write(offer).toString()));
             } catch (JsonProcessingException e) {
-                log.error("Stored credential offer for session {} is not valid JSON", session.id(), e);
+                log.error("Could not serialise the credential offer for session {}", session.id(), e);
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body("{\"error\":\"stored_offer_unreadable\"}");
+                        .body("{\"error\":\"offer_unreadable\"}");
             }
         }
         return ResponseEntity.ok(body.toString());
