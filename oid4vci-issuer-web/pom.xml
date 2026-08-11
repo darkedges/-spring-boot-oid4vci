@@ -56,5 +56,13 @@
       <artifactId>oid4vci-test-fixtures</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- MockHttpServletRequest: controllers now resolve their own base URL per request
+         (see RequestBaseUrl), so unit tests calling a controller method directly need a request to hand
+         it, not a full MVC dispatch. -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-test</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

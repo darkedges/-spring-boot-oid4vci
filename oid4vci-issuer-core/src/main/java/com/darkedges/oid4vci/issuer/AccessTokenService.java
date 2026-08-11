@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,13 +36,11 @@ public final class AccessTokenService {
     private static final String CREDENTIAL_CONFIGURATION_IDS_CLAIM = "credential_configuration_ids";
 
     private final ECKey issuerKey;
-    private final String issuer;
     private final Duration ttl;
     private final Clock clock;
 
-    public AccessTokenService(ECKey issuerKey, String issuer, Duration ttl, Clock clock) {
+    public AccessTokenService(ECKey issuerKey, Duration ttl, Clock clock) {
         this.issuerKey = issuerKey;
-        this.issuer = issuer;
         this.ttl = ttl;
         this.clock = clock;
     }
@@ -55,18 +54,31 @@ public final class AccessTokenService {
      * {@code session.claims()} keyed by the returned {@code subject}, e.g. via
      * {@link IssuedAccessTokenClaimsStore}, and look them up again once the token comes back on a
      * Credential Request.
+     *
+     * @param issuerBaseUrl the Issuer's own base URL as the client that requested this token actually
+     *                      reached it (see {@code RequestBaseUrl} in {@code oid4vci-issuer-web}) —
+     *                      embedded as this token's {@code iss} claim.
      */
-    public IssuedAccessToken issue(PreAuthorizedCodeSession session) {
+    public IssuedAccessToken issue(PreAuthorizedCodeSession session, String issuerBaseUrl) {
+        return issue(session, Optional.empty(), issuerBaseUrl);
+    }
+
+    /** As {@link #issue(PreAuthorizedCodeSession, String)}, but when {@code dpopJkt} is present,
+     * sender-constrains the minted token to that DPoP proof key by embedding a {@code cnf.jkt} claim
+     * (RFC 9449 Section 6) — the Credential Endpoint then requires a matching DPoP proof on every request
+     * that presents this token (see {@code DpopProofValidator#verifyForResourceRequest}). */
+    public IssuedAccessToken issue(PreAuthorizedCodeSession session, Optional<String> dpopJkt, String issuerBaseUrl) {
         Instant now = clock.instant();
         String subject = UUID.randomUUID().toString();
-        JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                .issuer(issuer)
+        JWTClaimsSet.Builder claimsBuilder = new JWTClaimsSet.Builder()
+                .issuer(issuerBaseUrl)
                 .subject(subject)
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plus(ttl)))
                 .jwtID(UUID.randomUUID().toString())
-                .claim(CREDENTIAL_CONFIGURATION_IDS_CLAIM, session.credentialConfigurationIds())
-                .build();
+                .claim(CREDENTIAL_CONFIGURATION_IDS_CLAIM, session.credentialConfigurationIds());
+        dpopJkt.ifPresent(jkt -> claimsBuilder.claim("cnf", Map.of("jkt", jkt)));
+        JWTClaimsSet claims = claimsBuilder.build();
 
         JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.ES256).keyID(issuerKey.getKeyID()).build();
         SignedJWT jwt = new SignedJWT(header, claims);
@@ -76,7 +88,8 @@ public final class AccessTokenService {
             throw new IllegalStateException("failed to sign access token", e);
         }
 
-        TokenResponse response = new TokenResponse(jwt.serialize(), "Bearer", Optional.of(ttl.toSeconds()), Optional.empty());
+        String tokenType = dpopJkt.isPresent() ? "DPoP" : "Bearer";
+        TokenResponse response = new TokenResponse(jwt.serialize(), tokenType, Optional.of(ttl.toSeconds()), Optional.empty());
         return new IssuedAccessToken(response, subject);
     }
 

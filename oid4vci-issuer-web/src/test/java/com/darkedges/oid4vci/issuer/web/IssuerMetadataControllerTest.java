@@ -1,12 +1,12 @@
 package com.darkedges.oid4vci.issuer.web;
 
-import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadata;
+import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
 import com.darkedges.oid4vci.core.metadata.SdJwtVcCredentialConfiguration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,13 +19,17 @@ class IssuerMetadataControllerTest {
 
     @Test
     void servesTheMetadataDocumentAsJson() throws Exception {
-        CredentialIssuerMetadata metadata = new CredentialIssuerMetadata(
-                URI.create("https://issuer.example.org"), URI.create("https://issuer.example.org/credential"),
-                Optional.of(URI.create("https://issuer.example.org/nonce")), Optional.empty(), List.of(),
+        CredentialIssuerMetadataTemplate template = new CredentialIssuerMetadataTemplate(
+                "/credential", Optional.of("/nonce"),
                 Map.of("UniversityDegreeCredential", new SdJwtVcCredentialConfiguration(
-                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of())));
+                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), Optional.empty())));
 
-        var response = new IssuerMetadataController(metadata).metadata();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setScheme("https");
+        request.setServerName("issuer.example.org");
+        request.setServerPort(443);
+
+        var response = new IssuerMetadataController(template).metadata(request);
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         JsonNode body = MAPPER.readTree(response.getBody());

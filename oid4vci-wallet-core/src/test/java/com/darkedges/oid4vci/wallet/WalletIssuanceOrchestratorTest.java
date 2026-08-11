@@ -72,22 +72,22 @@ class WalletIssuanceOrchestratorTest {
         PreAuthorizedCodeStore codeStore = new InMemoryPreAuthorizedCodeStore();
         PreAuthorizedCodeService codeService = new PreAuthorizedCodeService(codeStore, CLOCK);
         NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
-        AccessTokenService accessTokenService = new AccessTokenService(sdJwtIssuerKey, CREDENTIAL_ISSUER.toString(), Duration.ofMinutes(5), CLOCK);
+        AccessTokenService accessTokenService = new AccessTokenService(sdJwtIssuerKey, Duration.ofMinutes(5), CLOCK);
         IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
         ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
         SdJwtVcCredentialIssuanceService sdJwtIssuance = new SdJwtVcCredentialIssuanceService(
-                sdJwtIssuerKey, CREDENTIAL_ISSUER.toString(), List.of(), Duration.ofDays(365), CLOCK);
+                sdJwtIssuerKey, List.of(), Duration.ofDays(365), CLOCK);
         MsoMdocCredentialIssuanceService mdocIssuance = new MsoMdocCredentialIssuanceService(
                 mdocIssuerKeyPair.getPrivate(), List.of(), Duration.ofDays(365), CLOCK);
 
         Map<String, CredentialConfiguration> configurations = Map.of(
                 "UniversityDegreeCredential", new SdJwtVcCredentialConfiguration(
-                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of()),
+                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), Optional.empty()),
                 "org.iso.18013.5.1.mDL", new MsoMdocCredentialConfiguration(
                         "org.iso.18013.5.1.mDL",
                         List.of(new ClaimDescription(ClaimsPathPointer.of("org.iso.18013.5.1", "given_name"), Optional.empty()),
                                 new ClaimDescription(ClaimsPathPointer.of("org.iso.18013.5.1", "family_name"), Optional.of(true))),
-                        Map.of(), List.of(), List.of()));
+                        Map.of(), List.of(), List.of(), Optional.empty()));
 
         CredentialIssuerMetadata metadata = new CredentialIssuerMetadata(
                 CREDENTIAL_ISSUER, CREDENTIAL_ENDPOINT, Optional.of(NONCE_ENDPOINT), Optional.empty(), List.of(), configurations);
@@ -135,7 +135,7 @@ class WalletIssuanceOrchestratorTest {
         public TokenResponse exchange(URI tokenEndpoint, String preAuthorizedCode, Optional<String> txCode) {
             PreAuthorizedCodeSession session = codeService.redeem(
                     new com.darkedges.oid4vci.core.token.PreAuthorizedCodeTokenRequest(preAuthorizedCode, txCode));
-            AccessTokenService.IssuedAccessToken issued = accessTokenService.issue(session);
+            AccessTokenService.IssuedAccessToken issued = accessTokenService.issue(session, CREDENTIAL_ISSUER.toString());
             claimsStore.save(issued.subject(), session.claims());
             return issued.tokenResponse();
         }
@@ -169,8 +169,8 @@ class WalletIssuanceOrchestratorTest {
             Map<String, String> claims = claimsStore.find(tokenClaims.subject()).orElseThrow();
 
             String raw = switch (configuration) {
-                case SdJwtVcCredentialConfiguration ignored -> sdJwtIssuance.issue(configuration, claims, holderKey);
-                case MsoMdocCredentialConfiguration ignored -> mdocIssuance.issue(configuration, claims, holderKey);
+                case SdJwtVcCredentialConfiguration ignored -> sdJwtIssuance.issue(configuration, claims, holderKey, CREDENTIAL_ISSUER.toString());
+                case MsoMdocCredentialConfiguration ignored -> mdocIssuance.issue(configuration, claims, holderKey, CREDENTIAL_ISSUER.toString());
             };
 
             return new CredentialResponse(Optional.of(List.of(new IssuedCredential(raw))), Optional.empty());

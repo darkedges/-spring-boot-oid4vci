@@ -46,5 +46,14 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- oid4vci-issuer-web's controllers now take an HttpServletRequest parameter (see RequestBaseUrl);
+         jakarta.servlet-api is "provided" scope there (a real deployment's embedded container supplies
+         it), which doesn't propagate transitively, so this module's own ApplicationContextRunner-based
+         tests need it explicitly to even reflectively load those controller classes. -->
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

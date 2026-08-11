@@ -1,12 +1,15 @@
 package com.darkedges.oid4vci.demo.issuer;
 
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadata;
+import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
 import com.darkedges.oid4vci.core.offer.CredentialOffer;
 import com.darkedges.oid4vci.core.offer.CredentialOfferWriter;
 import com.darkedges.oid4vci.core.offer.Grants;
 import com.darkedges.oid4vci.core.offer.PreAuthorizedCodeGrant;
 import com.darkedges.oid4vci.issuer.PreAuthorizedCodeSession;
 import com.darkedges.oid4vci.issuer.PreAuthorizedCodeStore;
+import com.darkedges.oid4vci.issuer.web.RequestBaseUrl;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,15 +37,16 @@ public class DemoOfferController {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final PreAuthorizedCodeStore codeStore;
-    private final CredentialIssuerMetadata metadata;
+    private final CredentialIssuerMetadataTemplate template;
 
-    public DemoOfferController(PreAuthorizedCodeStore codeStore, CredentialIssuerMetadata metadata) {
+    public DemoOfferController(PreAuthorizedCodeStore codeStore, CredentialIssuerMetadataTemplate template) {
         this.codeStore = codeStore;
-        this.metadata = metadata;
+        this.template = template;
     }
 
     @GetMapping(value = "/demo/offer", produces = MediaType.APPLICATION_JSON_VALUE)
-    public String offer() {
+    public String offer(HttpServletRequest servletRequest) {
+        CredentialIssuerMetadata metadata = template.resolve(RequestBaseUrl.resolve(servletRequest));
         List<String> configurationIds = List.copyOf(metadata.credentialConfigurationsSupported().keySet());
         String code = randomCode();
 
@@ -58,8 +62,12 @@ public class DemoOfferController {
         return CredentialOfferWriter.write(offer).toString();
     }
 
+    /** 32 bytes, not 16 — see {@code AuthorizationEndpointController#randomCode}'s Javadoc for why a
+     * shorter code can fail the OpenID Conformance Suite's entropy check even at full cryptographic
+     * randomness. No such check currently targets {@code pre-authorized_code} specifically, but there's no
+     * reason for this code to be weaker than the {@code authorization_code} grant's. */
     private static String randomCode() {
-        byte[] bytes = new byte[16];
+        byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }

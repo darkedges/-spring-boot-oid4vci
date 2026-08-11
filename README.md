@@ -19,7 +19,7 @@ configuration conventions and credential-format handling of the sibling
 
 ## Prerequisites
 
-- **Java 21** and **Maven 3.9+** (see [oid4vp's README](../oid4vp/README.md#prerequisites) for a local,
+- **Java 21** and **Maven 3.9+** (see [oid4vp's README](https://github.com/darkedges/spring-boot-oid4vp/blob/main/README.md#prerequisites) for a local,
   no-root install if you don't have them).
 - **The sibling `oid4vp` reactor must be built and installed into your local `~/.m2` first** — this
   project depends on `oid4vp-core`, `oid4vp-format-sdjwt-vc`, `oid4vp-format-mdoc`, and (from the demo
@@ -95,16 +95,28 @@ verifier's "demo" registration, `mso_mdoc` against "demomdoc", including the lat
 1. `oid4vp-demo-verifier`'s `IssuerKeyResolver` resolves an issuer's key from the credential's own
    embedded certificate chain (SD-JWT VC's `x5c` / mdoc's `x5chain`) first, falling back to fetching a
    JWKS endpoint only for its own hardcoded `demo.wallet-base-url` — so an oid4vci-issued credential is
-   only verifiable by it once the credential itself carries a certificate chain. `DemoIssuerKeyConfig` now
-   loads two checked-in self-signed PKCS12 keystores (`demo-issuer-signing-key.p12`,
-   `demo-issuer-mdoc-key.p12` — same `keytool -genkeypair` technique as `demo-verifier-signing-key.p12`,
-   self-signed since `IssuerKeyResolver` does no CA-chain validation) instead of generating chain-less
-   keys fresh every startup; both `SdJwtVcCredentialIssuanceService` (now takes a `certificateChain`
-   constructor param, embedding `x509CertChain` into the JWS header) and `MsoMdocCredentialIssuanceService`
-   (already had the parameter) embed the resulting leaf cert.
-2. `oid4vci-demo-issuer`'s `UniversityDegreeCredential` `vct` was changed to
-   `https://demo.oid4vp.example/employee_credential` to match `oid4vp-demo-verifier`'s "demo" registration
-   DCQL query — the mdoc `doctype` and both formats' claim names already matched.
+   only verifiable by it once the credential itself carries a certificate chain. `DemoIssuerKeyConfig`
+   loads two checked-in PKCS12 keystores (`demo-issuer-signing-key.p12`, `demo-issuer-mdoc-key.p12` — same
+   `keytool` technique as `demo-verifier-signing-key.p12`) instead of generating chain-less keys fresh
+   every startup; both `SdJwtVcCredentialIssuanceService` (takes a `certificateChain` constructor param,
+   embedding `x509CertChain` into the JWS header) and `MsoMdocCredentialIssuanceService` embed the
+   resulting leaf cert. The SD-JWT VC keystore's leaf is CA-issued (not self-signed) by a throwaway
+   `keytool`-generated "oid4vci Demo CA" root — the OpenID Conformance Suite's HAIP `x5c` chain check
+   rejects a self-signed leaf, and separately rejects a self-signed trust anchor if it's *included* in
+   `x5c`, so only the (non-self-signed) leaf goes in `x5c`, not the root. `IssuerKeyResolver` still trusts
+   the embedded leaf outright either way, with no path validation.
+2. `oid4vci-demo-issuer`'s `UniversityDegreeCredential` `vct` is issuer-relative (`/vct/...`), resolved
+   per request against whichever base URL a client actually reached this issuer at (see
+   `RequestBaseUrl`/`SdJwtVcCredentialConfiguration#resolvedVct`), with `SdJwtVcTypeMetadataController`
+   serving real SD-JWT VC Type Metadata there — not the fixed `https://demo.oid4vp.example/employee_credential`
+   placeholder this previously matched `oid4vp-demo-verifier`'s "demo" registration DCQL query on: the
+   OpenID Conformance Suite does a real HTTP GET straight to `vct` for Type Metadata, which that
+   non-routable placeholder domain could never satisfy. `oid4vp-demo-verifier`'s `application.yml` now
+   lists both the placeholder (still used by `oid4vp-demo-wallet`'s own self-issued demo credential) and
+   `http://localhost:8092/vct/UniversityDegreeCredential` (matching the live-tested example below) in its
+   `vct_values` array — a different deployment (Docker network alias, public tunnel) needs its own entry
+   there to match whatever base URL the Wallet actually used. The mdoc `doctype` and both formats' claim
+   names still match regardless.
 3. `WalletIssuanceOrchestrator.obtainCredentials` resolved and used a holder-binding private key during
    issuance but discarded it afterward, returning only `HeldCredential`s — leaving no way to later sign a
    presentation. It now returns `List<HolderBoundCredential>` (credential + binding `ECKey` pair);

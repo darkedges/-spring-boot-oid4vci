@@ -25,11 +25,14 @@ public final class CredentialIssuerMetadataWriter {
         ObjectNode configurations = root.putObject("credential_configurations_supported");
         metadata.credentialConfigurationsSupported().forEach(
                 (id, configuration) -> configurations.set(id, writeConfiguration(configuration)));
+        metadata.batchCredentialIssuance().ifPresent(batch -> root.putObject("batch_credential_issuance")
+                .put("batch_size", batch.batchSize()));
         return root;
     }
 
     private static ObjectNode writeConfiguration(CredentialConfiguration configuration) {
         ObjectNode node = NODES.objectNode();
+        boolean claimsAtTopLevel = configuration instanceof SdJwtVcCredentialConfiguration;
         switch (configuration) {
             case SdJwtVcCredentialConfiguration c -> {
                 node.put("format", SdJwtVcCredentialConfiguration.WIRE_FORMAT);
@@ -40,8 +43,16 @@ public final class CredentialIssuerMetadataWriter {
                 node.put("doctype", c.doctype());
             }
         }
+        configuration.scope().ifPresent(s -> node.put("scope", s));
         if (!configuration.claims().isEmpty()) {
-            ArrayNode claims = node.putArray("claims");
+            // OID4VCI 1.0 Final Section 12.2.4/Appendix B: only dc+sd-jwt has its own top-level "claims"
+            // (Appendix B.2); every other format's claim descriptions live under the generic
+            // "credential_metadata.claims" (Appendix B.1) instead -- confirmed against the OpenID
+            // Conformance Suite's own credential_issuer_metadata-1_0.json schema, whose mso_mdoc branch
+            // defines no top-level "claims" property at all (a bare top-level "claims" on an mso_mdoc
+            // entry was flagged as an unexpected parameter in a real conformance run).
+            ObjectNode claimsHolder = claimsAtTopLevel ? node : node.putObject("credential_metadata");
+            ArrayNode claims = claimsHolder.putArray("claims");
             configuration.claims().forEach(c -> claims.add(writeClaimDescription(c)));
         }
         if (!configuration.proofTypesSupported().isEmpty()) {

@@ -1,10 +1,7 @@
 # Activated via SPRING_PROFILES_ACTIVE=docker (see docker-compose.yml).
 #
-# credential-issuer is embedded verbatim into the served Credential Issuer Metadata document
-# (credential_issuer, credential_endpoint, nonce_endpoint) and into the demo Wallet's own JWT decoder
-# JWKS lookup (Oid4vciIssuerAutoConfiguration.jwtDecoder) — it must be a URL the Wallet container can
-# actually reach, which under docker-compose is the service name, not "localhost" (that would resolve to
-# the Wallet's own container instead of this one).
-oid4vci:
-  issuer:
-    credential-issuer: "http://issuer:8092"
+# No overrides needed here anymore: the Credential Issuer derives credential_issuer/credential_endpoint/
+# the token iss/etc. from each request's own scheme+host (see application.yml's forward-headers-strategy
+# and RequestBaseUrl), so it no longer matters whether that's "issuer:8092" (docker-compose's internal
+# service name) or a public hostname -- whichever one a client actually used comes back correctly. Kept
+# as an active profile in case a docker-specific override is needed again later.

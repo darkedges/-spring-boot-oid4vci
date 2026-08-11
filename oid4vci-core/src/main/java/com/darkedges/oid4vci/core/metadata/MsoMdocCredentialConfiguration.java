@@ -4,6 +4,7 @@ import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@code credential_configurations_supported} entry for an {@code mso_mdoc} credential configuration
@@ -16,7 +17,8 @@ public record MsoMdocCredentialConfiguration(
         List<ClaimDescription> claims,
         Map<ProofType, ProofTypeSupported> proofTypesSupported,
         List<String> credentialSigningAlgValuesSupported,
-        List<String> cryptographicBindingMethodsSupported) implements CredentialConfiguration {
+        List<String> cryptographicBindingMethodsSupported,
+        Optional<String> scope) implements CredentialConfiguration {
 
     public MsoMdocCredentialConfiguration {
         if (doctype == null || doctype.isBlank()) {
@@ -26,6 +28,7 @@ public record MsoMdocCredentialConfiguration(
         proofTypesSupported = CredentialConfiguration.defaultedProofTypes(proofTypesSupported);
         credentialSigningAlgValuesSupported = CredentialConfiguration.defaultedAlgs(credentialSigningAlgValuesSupported);
         cryptographicBindingMethodsSupported = CredentialConfiguration.defaultedBindingMethods(cryptographicBindingMethodsSupported);
+        scope = CredentialConfiguration.defaultedScope(scope);
     }
 
     @Override

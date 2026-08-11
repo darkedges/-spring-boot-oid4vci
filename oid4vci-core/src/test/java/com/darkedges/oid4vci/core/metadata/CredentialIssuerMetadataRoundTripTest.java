@@ -34,6 +34,7 @@ class CredentialIssuerMetadataRoundTripTest {
         assertThat(metadata.credentialEndpoint().toString()).isEqualTo("https://credential-issuer.example.com/credential");
         assertThat(metadata.nonceEndpoint()).isPresent();
         assertThat(metadata.credentialConfigurationsSupported()).hasSize(2);
+        assertThat(metadata.batchCredentialIssuance()).contains(new BatchCredentialIssuance(10));
 
         CredentialConfiguration sdJwt = metadata.credentialConfigurationsSupported().get("UniversityDegreeCredential");
         assertThat(sdJwt).isInstanceOf(SdJwtVcCredentialConfiguration.class);

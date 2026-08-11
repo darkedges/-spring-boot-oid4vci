@@ -4,6 +4,7 @@ import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * A {@code credential_configurations_supported} map entry (OID4VCI 1.0, Section 12.2 / Appendix A) —
@@ -22,6 +23,13 @@ public sealed interface CredentialConfiguration permits SdJwtVcCredentialConfigu
 
     List<String> cryptographicBindingMethodsSupported();
 
+    /** OID4VCI 1.0 Section 12.2 OPTIONAL — the OAuth {@code scope} value a Wallet can send at the
+     * Authorization Endpoint instead of {@code authorization_details} to request this configuration. Not
+     * generally required by the base spec, but the High Assurance Interoperability Profile (HAIP) Section
+     * 4.1 mandates every configuration have one, and Section 4.3 mandates Wallets use it in place of RAR —
+     * see {@code AuthorizationEndpointController}. */
+    Optional<String> scope();
+
     /** Common validation shared by every format's configuration, factored out since every implementation
      * needs the same non-null defaulting for its shared fields. */
     static List<ClaimDescription> defaultedClaims(List<ClaimDescription> claims) {
@@ -38,5 +46,9 @@ public sealed interface CredentialConfiguration permits SdJwtVcCredentialConfigu
 
     static List<String> defaultedBindingMethods(List<String> methods) {
         return methods == null ? List.of() : List.copyOf(methods);
+    }
+
+    static Optional<String> defaultedScope(Optional<String> scope) {
+        return scope == null ? Optional.empty() : scope;
     }
 }

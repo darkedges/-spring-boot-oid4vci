@@ -1,7 +1,9 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import com.darkedges.oid4vci.core.error.Oid4vciErrorCode;
 import com.darkedges.oid4vci.core.error.Oid4vciException;
-import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadata;
+import com.darkedges.oid4vci.core.metadata.BatchCredentialIssuance;
+import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
 import com.darkedges.oid4vci.core.metadata.SdJwtVcCredentialConfiguration;
 import com.darkedges.oid4vci.core.proof.ProofOfPossessionJwt;
 import com.darkedges.oid4vci.issuer.CredentialIssuanceService;
@@ -13,6 +15,7 @@ import com.darkedges.oid4vci.issuer.ProofOfPossessionValidator;
 import com.darkedges.oid4vci.issuer.SdJwtVcCredentialIssuanceService;
 import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 import com.darkedges.oid4vp.sdjwt.SdJwtVcHeldCredential;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -26,6 +29,7 @@ import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 import java.net.URI;
@@ -73,16 +77,23 @@ class CredentialControllerTest {
         return jwt.serialize();
     }
 
+    private static MockHttpServletRequest request() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setScheme(CREDENTIAL_ISSUER.getScheme());
+        request.setServerName(CREDENTIAL_ISSUER.getHost());
+        request.setServerPort(443);
+        return request;
+    }
+
     @Test
     void issuesACredentialWhenTheTokenAuthorizesTheRequestedConfiguration() throws Exception {
         ECKey issuerKey = new ECKeyGenerator(Curve.P_256).keyID("issuer-1").generate();
         ECKey holderKey = new ECKeyGenerator(Curve.P_256).keyID("holder-1").generate();
 
-        CredentialIssuerMetadata metadata = new CredentialIssuerMetadata(
-                CREDENTIAL_ISSUER, URI.create("https://issuer.example.org/credential"),
-                Optional.of(URI.create("https://issuer.example.org/nonce")), Optional.empty(), List.of(),
+        CredentialIssuerMetadataTemplate template = new CredentialIssuerMetadataTemplate(
+                "/credential", Optional.of("/nonce"),
                 Map.of("UniversityDegreeCredential", new SdJwtVcCredentialConfiguration(
-                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of())));
+                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), Optional.empty())));
 
         NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
         ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
@@ -91,16 +102,17 @@ class CredentialControllerTest {
 
         Map<CredentialFormat, CredentialIssuanceService> issuanceServices = Map.of(
                 CredentialFormat.DC_SD_JWT, new SdJwtVcCredentialIssuanceService(
-                        issuerKey, CREDENTIAL_ISSUER.toString(), List.of(), Duration.ofDays(365), CLOCK));
+                        issuerKey, List.of(), Duration.ofDays(365), CLOCK));
 
-        CredentialController controller = new CredentialController(metadata, proofValidator, claimsStore, issuanceServices);
+        CredentialController controller = new CredentialController(template, proofValidator, claimsStore, issuanceServices);
 
         String nonce = nonceService.issue();
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("credential_configuration_id", "UniversityDegreeCredential");
         body.putObject("proofs").putArray("jwt").add(proofJwt(holderKey, nonce));
 
-        var response = controller.credential(accessToken("subject-1", List.of("UniversityDegreeCredential")), body.toString());
+        var response = controller.credential(
+                accessToken("subject-1", List.of("UniversityDegreeCredential")), body.toString(), request());
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         String issued = MAPPER.readTree(response.getBody()).get("credentials").get(0).get("credential").asText();
@@ -110,22 +122,129 @@ class CredentialControllerTest {
     @Test
     void rejectsARequestForAConfigurationTheTokenWasNotAuthorizedFor() throws Exception {
         ECKey issuerKey = new ECKeyGenerator(Curve.P_256).keyID("issuer-1").generate();
-        CredentialIssuerMetadata metadata = new CredentialIssuerMetadata(
-                CREDENTIAL_ISSUER, URI.create("https://issuer.example.org/credential"),
-                Optional.of(URI.create("https://issuer.example.org/nonce")), Optional.empty(), List.of(),
+        CredentialIssuerMetadataTemplate template = new CredentialIssuerMetadataTemplate(
+                "/credential", Optional.of("/nonce"),
                 Map.of("UniversityDegreeCredential", new SdJwtVcCredentialConfiguration(
-                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of())));
+                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), Optional.empty())));
         NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
         ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
         CredentialController controller = new CredentialController(
-                metadata, proofValidator, new InMemoryIssuedAccessTokenClaimsStore(),
+                template, proofValidator, new InMemoryIssuedAccessTokenClaimsStore(),
                 Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVcCredentialIssuanceService(
-                        issuerKey, CREDENTIAL_ISSUER.toString(), List.of(), Duration.ofDays(365), CLOCK)));
+                        issuerKey, List.of(), Duration.ofDays(365), CLOCK)));
 
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("credential_configuration_id", "UniversityDegreeCredential");
 
-        assertThatThrownBy(() -> controller.credential(accessToken("subject-1", List.of("SomeOtherCredential")), body.toString()))
+        assertThatThrownBy(() -> controller.credential(
+                accessToken("subject-1", List.of("SomeOtherCredential")), body.toString(), request()))
                 .isInstanceOf(Oid4vciException.class);
+    }
+
+    @Test
+    void issuesOneCredentialPerProofWhenBatchIssuanceIsAdvertised() throws Exception {
+        ECKey issuerKey = new ECKeyGenerator(Curve.P_256).keyID("issuer-1").generate();
+        ECKey holderKeyA = new ECKeyGenerator(Curve.P_256).keyID("holder-a").generate();
+        ECKey holderKeyB = new ECKeyGenerator(Curve.P_256).keyID("holder-b").generate();
+
+        CredentialIssuerMetadataTemplate template = new CredentialIssuerMetadataTemplate(
+                "/credential", Optional.of("/nonce"),
+                Map.of("UniversityDegreeCredential", new SdJwtVcCredentialConfiguration(
+                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), Optional.empty())),
+                Optional.of(new BatchCredentialIssuance(10)));
+
+        NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
+        ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
+        IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
+        claimsStore.save("subject-1", Map.of("given_name", "Jane"));
+
+        Map<CredentialFormat, CredentialIssuanceService> issuanceServices = Map.of(
+                CredentialFormat.DC_SD_JWT, new SdJwtVcCredentialIssuanceService(
+                        issuerKey, List.of(), Duration.ofDays(365), CLOCK));
+
+        CredentialController controller = new CredentialController(template, proofValidator, claimsStore, issuanceServices);
+
+        ObjectNode body = JsonNodeFactory.instance.objectNode();
+        body.put("credential_configuration_id", "UniversityDegreeCredential");
+        body.putObject("proofs").putArray("jwt")
+                .add(proofJwt(holderKeyA, nonceService.issue()))
+                .add(proofJwt(holderKeyB, nonceService.issue()));
+
+        var response = controller.credential(
+                accessToken("subject-1", List.of("UniversityDegreeCredential")), body.toString(), request());
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        JsonNode credentials = MAPPER.readTree(response.getBody()).get("credentials");
+        assertThat(credentials).hasSize(2);
+        assertThat(SdJwtVcHeldCredential.parse(credentials.get(0).get("credential").asText())
+                .claimsView().get("given_name").asText()).isEqualTo("Jane");
+        assertThat(SdJwtVcHeldCredential.parse(credentials.get(1).get("credential").asText())
+                .claimsView().get("given_name").asText()).isEqualTo("Jane");
+    }
+
+    @Test
+    void rejectsMoreProofsThanTheAdvertisedBatchSize() throws Exception {
+        ECKey issuerKey = new ECKeyGenerator(Curve.P_256).keyID("issuer-1").generate();
+
+        CredentialIssuerMetadataTemplate template = new CredentialIssuerMetadataTemplate(
+                "/credential", Optional.of("/nonce"),
+                Map.of("UniversityDegreeCredential", new SdJwtVcCredentialConfiguration(
+                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), Optional.empty())),
+                Optional.of(new BatchCredentialIssuance(2)));
+
+        NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
+        ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
+        IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
+        claimsStore.save("subject-1", Map.of("given_name", "Jane"));
+
+        CredentialController controller = new CredentialController(
+                template, proofValidator, claimsStore,
+                Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVcCredentialIssuanceService(
+                        issuerKey, List.of(), Duration.ofDays(365), CLOCK)));
+
+        ObjectNode body = JsonNodeFactory.instance.objectNode();
+        body.put("credential_configuration_id", "UniversityDegreeCredential");
+        body.putObject("proofs").putArray("jwt")
+                .add(proofJwt(new ECKeyGenerator(Curve.P_256).generate(), nonceService.issue()))
+                .add(proofJwt(new ECKeyGenerator(Curve.P_256).generate(), nonceService.issue()))
+                .add(proofJwt(new ECKeyGenerator(Curve.P_256).generate(), nonceService.issue()));
+
+        assertThatThrownBy(() -> controller.credential(
+                accessToken("subject-1", List.of("UniversityDegreeCredential")), body.toString(), request()))
+                .isInstanceOf(Oid4vciException.class)
+                .extracting(e -> ((Oid4vciException) e).errorCode())
+                .isEqualTo(Oid4vciErrorCode.INVALID_CREDENTIAL_REQUEST);
+    }
+
+    @Test
+    void rejectsMoreThanOneProofWhenBatchIssuanceIsNotAdvertised() throws Exception {
+        ECKey issuerKey = new ECKeyGenerator(Curve.P_256).keyID("issuer-1").generate();
+
+        CredentialIssuerMetadataTemplate template = new CredentialIssuerMetadataTemplate(
+                "/credential", Optional.of("/nonce"),
+                Map.of("UniversityDegreeCredential", new SdJwtVcCredentialConfiguration(
+                        "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), Optional.empty())));
+
+        NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
+        ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
+        IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
+        claimsStore.save("subject-1", Map.of("given_name", "Jane"));
+
+        CredentialController controller = new CredentialController(
+                template, proofValidator, claimsStore,
+                Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVcCredentialIssuanceService(
+                        issuerKey, List.of(), Duration.ofDays(365), CLOCK)));
+
+        ObjectNode body = JsonNodeFactory.instance.objectNode();
+        body.put("credential_configuration_id", "UniversityDegreeCredential");
+        body.putObject("proofs").putArray("jwt")
+                .add(proofJwt(new ECKeyGenerator(Curve.P_256).generate(), nonceService.issue()))
+                .add(proofJwt(new ECKeyGenerator(Curve.P_256).generate(), nonceService.issue()));
+
+        assertThatThrownBy(() -> controller.credential(
+                accessToken("subject-1", List.of("UniversityDegreeCredential")), body.toString(), request()))
+                .isInstanceOf(Oid4vciException.class)
+                .extracting(e -> ((Oid4vciException) e).errorCode())
+                .isEqualTo(Oid4vciErrorCode.INVALID_CREDENTIAL_REQUEST);
     }
 }

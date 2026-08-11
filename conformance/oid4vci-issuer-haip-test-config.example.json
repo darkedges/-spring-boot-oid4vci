@@ -1,0 +1,52 @@
+{
+    "alias": "oid4vci-issuer-test",
+    "description": "oid4vci-demo-issuer HAIP conformance (oid4vci-1_0-issuer-haip-test-plan) against https://issuer.zkp.au -- requires the Cloudflare tunnel stack (docker-compose.tunnel.yml) to be running; see conformance/README.md",
+    "vci": {
+        "credential_issuer_url": "https://issuer.zkp.au",
+        "credential_configuration_id": "UniversityDegreeCredential",
+        "credential_proof_type_hint": "jwt"
+    },
+    "client": {
+        "jwks": {
+            "keys": [
+                {
+                    "kty": "EC",
+                    "d": "<PLACEHOLDER -- private half of a fresh, throwaway P-256 test wallet key; never commit the real value>",
+                    "use": "sig",
+                    "crv": "P-256",
+                    "kid": "vci-conformance-wallet-key",
+                    "x": "<PLACEHOLDER>",
+                    "y": "<PLACEHOLDER>",
+                    "alg": "ES256"
+                }
+            ]
+        },
+        "client_id": "test-wallet"
+    },
+    "credential": {
+        "trust_anchor_pem": "-----BEGIN CERTIFICATE-----\n<PLACEHOLDER -- PEM of the throwaway root CA that issued demo-issuer-signing-key.p12's leaf cert (not the leaf itself -- the leaf alone is in the credential's own x5c, not the root; see DemoIssuerKeyConfig.java)>\n-----END CERTIFICATE-----\n",
+        "status_list_trust_anchor_pem": "-----BEGIN CERTIFICATE-----\n<PLACEHOLDER -- PEM of this issuer's status list signing trust anchor, if applicable>\n-----END CERTIFICATE-----"
+    },
+    "client_attestation": {
+        "attester_jwks": {
+            "keys": [
+                {
+                    "kty": "EC",
+                    "d": "<PLACEHOLDER -- private half of the Wallet Provider attestation key. This project's own application.yml documents that this key's private half must never live in this repo -- keep it only in the real (gitignored) config, never here>",
+                    "crv": "P-256",
+                    "kid": "wallet-provider-1",
+                    "x": "9Al9vrGfZLj1Qi5Ltc4ekhgFaSOA69GcE0x8pyWdFeU",
+                    "y": "JvuZb_4rbI-aPSFGuYOtFpz5QRlWSFE8B4h5m_gnPwU",
+                    "alg": "ES256",
+                    "x5c": [
+                        "<PLACEHOLDER -- DER cert matching the checked-in client-attestation-trusted-issuer-key public JWK in oid4vci-demo-issuer/src/main/resources/application.yml>"
+                    ]
+                }
+            ]
+        },
+        "issuer": "https://wallet-provider.zkp.au"
+    },
+    "client2": {
+        "client_id": "test-wallet2"
+    }
+}

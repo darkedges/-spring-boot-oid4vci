@@ -74,9 +74,9 @@ class IssuancePipelineTest {
                 new PreAuthorizedCodeService(codeStore, CLOCK),
                 nonceStore,
                 nonceService,
-                new AccessTokenService(sdJwtIssuerKey, CREDENTIAL_ISSUER, Duration.ofMinutes(5), CLOCK),
+                new AccessTokenService(sdJwtIssuerKey, Duration.ofMinutes(5), CLOCK),
                 new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5)),
-                new SdJwtVcCredentialIssuanceService(sdJwtIssuerKey, CREDENTIAL_ISSUER, List.of(), Duration.ofDays(365), CLOCK),
+                new SdJwtVcCredentialIssuanceService(sdJwtIssuerKey, List.of(), Duration.ofDays(365), CLOCK),
                 new MsoMdocCredentialIssuanceService(mdocIssuerKeyPair.getPrivate(), List.of(), Duration.ofDays(365), CLOCK),
                 holderKey);
     }
@@ -105,7 +105,7 @@ class IssuancePipelineTest {
         fixture.codeStore().save("code-1", session);
 
         PreAuthorizedCodeSession redeemed = fixture.codeService().redeem(new PreAuthorizedCodeTokenRequest("code-1", java.util.Optional.empty()));
-        AccessTokenService.IssuedAccessToken issuedToken = fixture.accessTokenService().issue(redeemed);
+        AccessTokenService.IssuedAccessToken issuedToken = fixture.accessTokenService().issue(redeemed, CREDENTIAL_ISSUER);
         AccessTokenService.AccessTokenClaims tokenClaims = fixture.accessTokenService().verify(issuedToken.tokenResponse().accessToken());
         assertThat(tokenClaims.credentialConfigurationIds()).containsExactly("UniversityDegreeCredential");
         assertThat(tokenClaims.subject()).isEqualTo(issuedToken.subject());
@@ -116,8 +116,8 @@ class IssuancePipelineTest {
         assertThat(provenHolderKey.getKeyID()).isEqualTo(fixture.holderKey().getKeyID());
 
         SdJwtVcCredentialConfiguration configuration = new SdJwtVcCredentialConfiguration(
-                "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of());
-        String issued = fixture.sdJwtService().issue(configuration, redeemed.claims(), provenHolderKey);
+                "https://issuer.example.org/vct/UniversityDegree", List.of(), Map.of(), List.of(), List.of(), java.util.Optional.empty());
+        String issued = fixture.sdJwtService().issue(configuration, redeemed.claims(), provenHolderKey, CREDENTIAL_ISSUER);
 
         SdJwtVcHeldCredential heldCredential = SdJwtVcHeldCredential.parse(issued);
         JsonNode claims = heldCredential.claimsView();
@@ -146,9 +146,9 @@ class IssuancePipelineTest {
                                 com.darkedges.oid4vp.core.dcql.ClaimsPathPointer.of("org.iso.18013.5.1", "given_name"), java.util.Optional.empty()),
                         new com.darkedges.oid4vci.core.metadata.ClaimDescription(
                                 com.darkedges.oid4vp.core.dcql.ClaimsPathPointer.of("org.iso.18013.5.1", "family_name"), java.util.Optional.of(true))),
-                Map.of(), List.of(), List.of());
+                Map.of(), List.of(), List.of(), java.util.Optional.empty());
 
-        String issued = fixture.mdocService().issue(configuration, redeemed.claims(), provenHolderKey);
+        String issued = fixture.mdocService().issue(configuration, redeemed.claims(), provenHolderKey, CREDENTIAL_ISSUER);
 
         byte[] issuerSigned = Base64.getUrlDecoder().decode(issued);
         MdocHeldCredential heldCredential = MdocHeldCredential.parse(issuerSigned);

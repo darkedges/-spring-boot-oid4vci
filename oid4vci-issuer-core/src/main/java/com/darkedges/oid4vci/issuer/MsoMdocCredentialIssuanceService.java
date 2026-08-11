@@ -53,7 +53,7 @@ public final class MsoMdocCredentialIssuanceService implements CredentialIssuanc
     }
 
     @Override
-    public String issue(CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey) {
+    public String issue(CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey, String issuerBaseUrl) {
         if (!(configuration instanceof MsoMdocCredentialConfiguration mdocConfiguration)) {
             throw new IllegalArgumentException(
                     "expected an MsoMdocCredentialConfiguration, got: " + configuration.getClass().getSimpleName());

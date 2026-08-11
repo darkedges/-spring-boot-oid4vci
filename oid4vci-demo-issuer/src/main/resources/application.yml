@@ -1,17 +1,59 @@
 server:
   port: 8092
+  # Credential Issuer Metadata, minted tokens' iss, issued credentials' iss, and the DPoP htu check are
+  # all built per-request from the scheme/host the client actually used (see RequestBaseUrl) rather than
+  # a fixed config value -- this app may be reached directly, via docker-compose's internal network alias,
+  # or via a public reverse-proxy hostname (see application-cloudflare.yml), and the same deployment must
+  # reflect back whichever one was actually used. That only works correctly if X-Forwarded-Proto/Host from
+  # a front door are trusted.
+  forward-headers-strategy: framework
 
 oid4vci:
   issuer:
-    credential-issuer: "http://localhost:8092"
-    # Two configurations chosen to match oid4vp's existing demo data exactly (given_name/family_name;
-    # doctype org.iso.18013.5.1.mDL), for zero-friction interop with the sibling oid4vp project's demo
-    # Verifier/Wallet -- see the root README. The vct below matches oid4vp-demo-verifier's "demo"
-    # registration dcql-query vct_values exactly, so a credential issued here can be presented there
-    # without the verifier's DCQL evaluation rejecting it on vct mismatch.
+    # Two configurations chosen to match oid4vp's existing demo data (given_name/family_name; doctype
+    # org.iso.18013.5.1.mDL), for interop with the sibling oid4vp project's demo Verifier/Wallet -- see
+    # the root README.
+    #
+    # vct is issuer-relative ("/vct/..."), not the literal https://demo.oid4vp.example/employee_credential
+    # oid4vp-demo-verifier's own DCQL query still hardcodes: that domain is a deliberately non-routable
+    # RFC 2606 placeholder, and the OpenID Conformance Suite's VCIFetchSdJwtVcTypeMetadata check does a
+    # real HTTP GET straight to vct (confirmed live) -- it always failed to resolve. CredentialIssuerMetadataTemplate#resolve
+    # rewrites this to this issuer's own actually-reachable base URL per request (see RequestBaseUrl), and
+    # SdJwtVcTypeMetadataController serves real Type Metadata there. This does mean a credential issued
+    # here no longer matches oid4vp-demo-verifier's hardcoded vct_values until that sibling repo's config
+    # is updated to match -- a known, separate follow-up outside this repo.
+    #
+    # "scope" on each entry is OID4VCI-optional but HAIP-mandatory (Section 4.1 requires every
+    # configuration have one; Section 4.3 requires Wallets request issuance via scope instead of
+    # authorization_details) -- see AuthorizationEndpointController. Reusing each configuration's own id
+    # as its scope value, a common convention with no other significance.
     credential-configurations-supported: >
-      {"UniversityDegreeCredential":{"format":"vc+sd-jwt",
-      "vct":"https://demo.oid4vp.example/employee_credential",
-      "claims":[{"path":["given_name"]},{"path":["family_name"],"mandatory":true}]},
-      "org.iso.18013.5.1.mDL":{"format":"mso_mdoc","doctype":"org.iso.18013.5.1.mDL",
-      "claims":[{"path":["org.iso.18013.5.1","given_name"]},{"path":["org.iso.18013.5.1","family_name"],"mandatory":true}]}}
+      {"UniversityDegreeCredential":{"format":"dc+sd-jwt",
+      "vct":"/vct/UniversityDegreeCredential","scope":"UniversityDegreeCredential",
+      "claims":[{"path":["given_name"]},{"path":["family_name"],"mandatory":true}],
+      "proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},
+      "cryptographic_binding_methods_supported":["jwk"]},
+      "org.iso.18013.5.1.mDL":{"format":"mso_mdoc","doctype":"org.iso.18013.5.1.mDL","scope":"org.iso.18013.5.1.mDL",
+      "claims":[{"path":["org.iso.18013.5.1","given_name"]},{"path":["org.iso.18013.5.1","family_name"],"mandatory":true}],
+      "proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},
+      "cryptographic_binding_methods_supported":["cose_key"]}}
+    # Advertises batch_credential_issuance in the Issuer Metadata (OID4VCI 1.0 Final Section 12.2.4):
+    # the Credential Endpoint accepts up to this many proofs per Credential Request, minting one
+    # Credential per proof against the same claim values. 10 has no significance beyond matching the
+    # spec's own non-normative metadata example.
+    batch-credential-issuance-max-size: 10
+    # Enables attest_jwt_client_auth (see ClientAttestationTrustAnchor): this is a throwaway demo "Wallet
+    # Provider" keypair, checked in purely so the OpenID Conformance Suite's client_attestation variant has
+    # something real to authenticate against out of the box -- only the public key lives here, matching
+    # the pattern of every other checked-in demo key material in this app. The private half goes in the
+    # conformance suite's own test configuration (client_attestation.attester_jwks), never in this repo.
+    client-attestation-trusted-issuer: "https://wallet-provider.zkp.au"
+    client-attestation-trusted-issuer-key: >
+      {"kty":"EC","crv":"P-256","kid":"wallet-provider-1",
+      "x":"9Al9vrGfZLj1Qi5Ltc4ekhgFaSOA69GcE0x8pyWdFeU",
+      "y":"JvuZb_4rbI-aPSFGuYOtFpz5QRlWSFE8B4h5m_gnPwU","alg":"ES256"}
+    # Enables the Challenge Endpoint (draft-ietf-oauth-attestation-based-client-auth Section 6): every
+    # Client Attestation PoP JWT must then carry a matching, single-use "challenge" claim fetched from
+    # here first, replacing the iat/jti-only replay defense with a server-issued nonce.
+    attestation-challenge-endpoint-path: "/challenge"
+

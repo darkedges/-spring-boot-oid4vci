@@ -21,6 +21,8 @@ import java.util.Optional;
  *                              Server (the only case a v1 Issuer needs, since it self-issues its own
  *                              pre-authorized codes).
  * @param credentialConfigurationsSupported REQUIRED non-empty, keyed by configuration id.
+ * @param batchCredentialIssuance OPTIONAL — see {@link BatchCredentialIssuance}. Absent means the
+ *                              Credential Endpoint issues at most one Credential per request.
  */
 public record CredentialIssuerMetadata(
         URI credentialIssuer,
@@ -28,7 +30,8 @@ public record CredentialIssuerMetadata(
         Optional<URI> nonceEndpoint,
         Optional<URI> deferredCredentialEndpoint,
         List<URI> authorizationServers,
-        Map<String, CredentialConfiguration> credentialConfigurationsSupported) {
+        Map<String, CredentialConfiguration> credentialConfigurationsSupported,
+        Optional<BatchCredentialIssuance> batchCredentialIssuance) {
 
     public CredentialIssuerMetadata {
         if (credentialIssuer == null) {
@@ -44,5 +47,16 @@ public record CredentialIssuerMetadata(
         deferredCredentialEndpoint = deferredCredentialEndpoint == null ? Optional.empty() : deferredCredentialEndpoint;
         authorizationServers = authorizationServers == null ? List.of() : List.copyOf(authorizationServers);
         credentialConfigurationsSupported = Map.copyOf(credentialConfigurationsSupported);
+        batchCredentialIssuance = batchCredentialIssuance == null ? Optional.empty() : batchCredentialIssuance;
+    }
+
+    /** As the canonical constructor, but with no {@code batch_credential_issuance} — for the many
+     * existing call sites (tests, {@code oid4vci-wallet-core}) that don't care about batch issuance. */
+    public CredentialIssuerMetadata(
+            URI credentialIssuer, URI credentialEndpoint, Optional<URI> nonceEndpoint,
+            Optional<URI> deferredCredentialEndpoint, List<URI> authorizationServers,
+            Map<String, CredentialConfiguration> credentialConfigurationsSupported) {
+        this(credentialIssuer, credentialEndpoint, nonceEndpoint, deferredCredentialEndpoint,
+                authorizationServers, credentialConfigurationsSupported, Optional.empty());
     }
 }

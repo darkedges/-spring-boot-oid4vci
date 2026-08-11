@@ -38,5 +38,18 @@ logs/
 .env
 .env.*
 
+# Real OpenID Conformance Suite config -- contains live private key material (test wallet key,
+# client_attestation.attester_jwks private half); see conformance/README.md. Only the placeholder
+# .example.json counterpart is tracked.
+conformance/oid4vci-issuer-haip-test-config.json
+
+# Local venv for the vendored conformance-suite automation scripts (conformance/run.sh creates this
+# on first run).
+conformance/scripts/.venv/
+
+# Python
+__pycache__/
+*.pyc
+
 # Docker
 docker-compose.override.yml
