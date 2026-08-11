@@ -15,3 +15,4 @@ services:
   issuer:
     environment:
       - SPRING_PROFILES_ACTIVE=cloudflare
+      - PROOFING_CALLBACK_SECRET=${PROOFING_CALLBACK_SECRET}
