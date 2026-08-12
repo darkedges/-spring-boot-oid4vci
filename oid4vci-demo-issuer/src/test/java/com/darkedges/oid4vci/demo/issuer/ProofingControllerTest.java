@@ -75,7 +75,7 @@ class ProofingControllerTest {
     private static ProofingResultRequest passingResultFor(String sessionId) {
         return new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, true, true, true, true, true, true, true);
+                true, true, true, true, true, true, true, true, null);
     }
 
     private String startSession() throws Exception {
@@ -224,7 +224,7 @@ class ProofingControllerTest {
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest failed = new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, false, true, true, true, true, true, true);
+                true, false, true, true, true, true, true, true, null);
 
         controller.receiveResult(SECRET, failed, servletRequest());
         JsonNode polled = MAPPER.readTree(controller.pollSession(sessionId, secretFor(created), servletRequest()).getBody());
@@ -241,7 +241,7 @@ class ProofingControllerTest {
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest deviceSuppliedFace = new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, true, true, true, true, true, false, true);
+                true, true, true, true, true, true, false, true, null);
 
         controller.receiveResult(SECRET, deviceSuppliedFace, servletRequest());
 
@@ -257,7 +257,7 @@ class ProofingControllerTest {
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest unknownChain = new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, true, true, true, null, true, true, true);
+                true, true, true, true, null, true, true, true, null);
 
         controller.receiveResult(SECRET, unknownChain, servletRequest());
 
@@ -293,7 +293,7 @@ class ProofingControllerTest {
         String sessionId = startSession();
         ProofingResultRequest noDocumentNumber = new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "  ", "GBR", "GBR", "310612",
-                true, true, true, true, true, true, true, true);
+                true, true, true, true, true, true, true, true, null);
 
         ResponseEntity<String> response = controller.receiveResult(SECRET, noDocumentNumber, servletRequest());
 
@@ -308,7 +308,7 @@ class ProofingControllerTest {
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest mononymous = new ProofingResultRequest(
                 sessionId, "", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, true, true, true, true, true, true, true);
+                true, true, true, true, true, true, true, true, null);
 
         controller.receiveResult(SECRET, mononymous, servletRequest());
 

@@ -33,7 +33,25 @@ public record ProofingResultRequest(
         @JsonProperty("csca_validated") Boolean cscaValidated,
         @JsonProperty("revocation_checked") Boolean revocationChecked,
         @JsonProperty("portrait_from_chip") Boolean portraitFromChip,
-        @JsonProperty("active_authentication_valid") Boolean activeAuthenticationValid) {
+        @JsonProperty("active_authentication_valid") Boolean activeAuthenticationValid,
+        /**
+         * The passport portrait as a comparable face template, or null.
+         *
+         * A 512-dimensional ArcFace embedding, base64. Not a photograph and not renderable as one,
+         * which is why a credential can carry it: a wallet compares a live selfie against it on the
+         * device, without the holder's picture travelling to every verifier that asks.
+         *
+         * <p>Still biometric data about a specific person, and issued into a selectively-disclosable
+         * claim for that reason — a verifier that does not need to match never receives it. It is
+         * closer to a fingerprint than a password: template-inversion research reconstructs a face
+         * a matcher accepts from an embedding alone, and re-issuing does not undo a disclosure.
+         *
+         * <p>Null whenever the proofing service produced none — no model loaded, or a portrait that
+         * came from the device rather than the chip. Absent rather than invented, because a template
+         * derived from a device-supplied picture would put a stranger's face into a credential
+         * asserting this identity.
+         */
+        @JsonProperty("face_template") String faceTemplate) {
 
     /**
      * Whether this result is good enough to mint a credential from.

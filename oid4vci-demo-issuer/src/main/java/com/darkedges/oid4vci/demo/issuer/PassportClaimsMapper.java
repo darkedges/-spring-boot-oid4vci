@@ -11,9 +11,15 @@ import java.util.Map;
  *
  * <p>Every value is a {@code String} because that is what {@code PreAuthorizedCodeSession#claims},
  * {@code IssuedAccessTokenClaimsStore} and {@code SdJwtVcCredentialIssuanceService} all carry. The
- * DG2 portrait is deliberately absent: it would have to be base64 inside one of those strings,
- * bloating every credential and every presentation that discloses it, and widening the claim type
- * across five classes is a decision to take on its own rather than as a side effect of this feature.
+ * DG2 portrait itself is deliberately absent: as an image it would have to be base64 inside one of
+ * those strings, bloating every credential and every presentation that discloses it, and widening the
+ * claim type across five classes is a decision to take on its own rather than as a side effect.
+ *
+ * <p>What is carried instead is a <em>face template</em> — a 512-float ArcFace embedding, about 2.7KB
+ * base64, and still the largest claim here by a wide margin. It is not a photograph and cannot be
+ * rendered as one, which is what makes it issuable: a wallet compares a live selfie against it on the
+ * device, and no verifier receives the holder's picture. It remains biometric data about a specific
+ * person, so it is one disclosure among several rather than part of the always-visible payload.
  *
  * <p>{@code assurance_level} and {@code evidence} exist so a Verifier is told what this credential is
  * <em>not</em>. It is issued from a proof of concept with no certified presentation-attack detection
@@ -21,6 +27,9 @@ import java.util.Map;
  * silent about that would be making a stronger claim than the evidence supports.
  */
 public final class PassportClaimsMapper {
+
+    /** Kept in step with {@code face_template.TEMPLATE_FORMAT} in the proofing service. */
+    static final String FACE_TEMPLATE_FORMAT = "arcface-buffalo_l-512-f32";
 
     private final Clock clock;
 
@@ -37,6 +46,15 @@ public final class PassportClaimsMapper {
         claims.put("nationality", result.nationality());
         claims.put("issuing_state", result.issuingState());
         claims.put("expiry_date", toIsoDate(result.dateOfExpiry(), true));
+        // Only when one was produced. An absent template is an ordinary outcome, and a claim
+        // present-but-empty would be worse than missing: a verifier would try to match against it.
+        if (result.faceTemplate() != null && !result.faceTemplate().isBlank()) {
+            claims.put("face_template", result.faceTemplate());
+            // Names the model and layout the template came from. A verifier that does not recognise
+            // this must refuse to compare rather than guess -- a cosine score between embeddings
+            // from two different models is a meaningless number that looks exactly like a real one.
+            claims.put("face_template_format", FACE_TEMPLATE_FORMAT);
+        }
         claims.put("assurance_level", "poc-demo");
         claims.put("evidence", describeEvidence(result));
         return Map.copyOf(claims);

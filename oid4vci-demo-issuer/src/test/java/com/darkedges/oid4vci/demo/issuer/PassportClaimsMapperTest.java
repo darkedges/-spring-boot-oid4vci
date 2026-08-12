@@ -19,7 +19,7 @@ class PassportClaimsMapperTest {
     private static ProofingResultRequest passing() {
         return new ProofingResultRequest(
                 "session-1", "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, true, true, true, true, true, true, true);
+                true, true, true, true, true, true, true, true, null);
     }
 
     @Test
@@ -88,12 +88,46 @@ class PassportClaimsMapperTest {
     }
 
     @Test
+    void carriesAFaceTemplateWhenOneWasProduced() {
+        ProofingResultRequest withTemplate = new ProofingResultRequest(
+                "session-1", "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
+                true, true, true, true, true, true, true, true, "QUJDRA==");
+
+        Map<String, String> claims = mapper.toClaims(withTemplate);
+
+        assertThat(claims).containsEntry("face_template", "QUJDRA==");
+        // The format goes with it. A verifier comparing an embedding against one from a different
+        // model gets a cosine score that means nothing and looks exactly like a real one, so it must
+        // be able to recognise the format and refuse rather than guess.
+        assertThat(claims).containsEntry("face_template_format", "arcface-buffalo_l-512-f32");
+    }
+
+    @Test
+    void omitsTheFaceTemplateEntirelyWhenThereIsNone() {
+        // A document that produced no usable portrait still issues a credential -- just one nothing
+        // can match against. An empty claim would be worse than a missing one: a verifier would try.
+        Map<String, String> claims = mapper.toClaims(passing());
+
+        assertThat(claims).doesNotContainKey("face_template");
+        assertThat(claims).doesNotContainKey("face_template_format");
+    }
+
+    @Test
+    void treatsABlankTemplateAsNoTemplate() {
+        ProofingResultRequest blank = new ProofingResultRequest(
+                "session-1", "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
+                true, true, true, true, true, true, true, true, "   ");
+
+        assertThat(mapper.toClaims(blank)).doesNotContainKey("face_template");
+    }
+
+    @Test
     void distinguishesACheckThatFailedFromOneThatNeverRan() {
         // null means not determined -- an absent CRL, a passport with no Active Authentication -- and
         // reporting that as "failed" would accuse a perfectly ordinary document of something.
         ProofingResultRequest notDetermined = new ProofingResultRequest(
                 "session-1", "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, true, true, true, true, null, true, null);
+                true, true, true, true, true, null, true, null, null);
 
         String evidence = mapper.toClaims(notDetermined).get("evidence");
 
@@ -106,7 +140,7 @@ class PassportClaimsMapperTest {
     void reportsAFailedCheckAsFailed() {
         ProofingResultRequest revocationFailed = new ProofingResultRequest(
                 "session-1", "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
-                true, true, true, true, true, false, true, true);
+                true, true, true, true, true, false, true, true, null);
 
         assertThat(mapper.toClaims(revocationFailed).get("evidence")).contains("revocation=failed");
     }
