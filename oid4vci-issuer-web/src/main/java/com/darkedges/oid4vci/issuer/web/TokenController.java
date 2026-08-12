@@ -104,7 +104,7 @@ public class TokenController {
         }
 
         AccessTokenService.IssuedAccessToken issued = accessTokenService.issue(session, dpopJkt, baseUrl);
-        claimsStore.save(issued.subject(), session.claims());
+        claimsStore.save(issued.subject(), session.claims(), issued.expiresAt());
 
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(TokenResponseWriter.write(issued.tokenResponse()).toString());

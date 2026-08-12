@@ -98,13 +98,13 @@ class CredentialControllerTest {
         NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
         ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
         IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
-        claimsStore.save("subject-1", Map.of("given_name", "Jane"));
+        claimsStore.save("subject-1", Map.of("given_name", "Jane"), NOW.plus(Duration.ofMinutes(5)));
 
         Map<CredentialFormat, CredentialIssuanceService> issuanceServices = Map.of(
                 CredentialFormat.DC_SD_JWT, new SdJwtVcCredentialIssuanceService(
                         issuerKey, List.of(), Duration.ofDays(365), CLOCK));
 
-        CredentialController controller = new CredentialController(template, proofValidator, claimsStore, issuanceServices);
+        CredentialController controller = new CredentialController(template, proofValidator, claimsStore, issuanceServices, CLOCK);
 
         String nonce = nonceService.issue();
         ObjectNode body = JsonNodeFactory.instance.objectNode();
@@ -156,13 +156,13 @@ class CredentialControllerTest {
         NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
         ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
         IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
-        claimsStore.save("subject-1", Map.of("given_name", "Jane"));
+        claimsStore.save("subject-1", Map.of("given_name", "Jane"), NOW.plus(Duration.ofMinutes(5)));
 
         Map<CredentialFormat, CredentialIssuanceService> issuanceServices = Map.of(
                 CredentialFormat.DC_SD_JWT, new SdJwtVcCredentialIssuanceService(
                         issuerKey, List.of(), Duration.ofDays(365), CLOCK));
 
-        CredentialController controller = new CredentialController(template, proofValidator, claimsStore, issuanceServices);
+        CredentialController controller = new CredentialController(template, proofValidator, claimsStore, issuanceServices, CLOCK);
 
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("credential_configuration_id", "UniversityDegreeCredential");
@@ -195,7 +195,7 @@ class CredentialControllerTest {
         NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
         ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
         IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
-        claimsStore.save("subject-1", Map.of("given_name", "Jane"));
+        claimsStore.save("subject-1", Map.of("given_name", "Jane"), NOW.plus(Duration.ofMinutes(5)));
 
         CredentialController controller = new CredentialController(
                 template, proofValidator, claimsStore,
@@ -228,7 +228,7 @@ class CredentialControllerTest {
         NonceService nonceService = new NonceService(new InMemoryNonceStore(), CLOCK, Duration.ofMinutes(5));
         ProofOfPossessionValidator proofValidator = new ProofOfPossessionValidator(nonceService, CLOCK, Duration.ofMinutes(5));
         IssuedAccessTokenClaimsStore claimsStore = new InMemoryIssuedAccessTokenClaimsStore();
-        claimsStore.save("subject-1", Map.of("given_name", "Jane"));
+        claimsStore.save("subject-1", Map.of("given_name", "Jane"), NOW.plus(Duration.ofMinutes(5)));
 
         CredentialController controller = new CredentialController(
                 template, proofValidator, claimsStore,

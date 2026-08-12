@@ -18,6 +18,8 @@ import com.darkedges.oid4vci.issuer.ProofOfPossessionValidator;
 import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.Clock;
 import com.nimbusds.jose.jwk.ECKey;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
@@ -67,14 +69,23 @@ public class CredentialController {
     private final ProofOfPossessionValidator proofValidator;
     private final IssuedAccessTokenClaimsStore claimsStore;
     private final Map<CredentialFormat, CredentialIssuanceService> issuanceServices;
+    private final Clock clock;
 
     public CredentialController(
             CredentialIssuerMetadataTemplate template, ProofOfPossessionValidator proofValidator,
             IssuedAccessTokenClaimsStore claimsStore, Map<CredentialFormat, CredentialIssuanceService> issuanceServices) {
+        this(template, proofValidator, claimsStore, issuanceServices, Clock.systemUTC());
+    }
+
+    public CredentialController(
+            CredentialIssuerMetadataTemplate template, ProofOfPossessionValidator proofValidator,
+            IssuedAccessTokenClaimsStore claimsStore, Map<CredentialFormat, CredentialIssuanceService> issuanceServices,
+            Clock clock) {
         this.template = template;
         this.proofValidator = proofValidator;
         this.claimsStore = claimsStore;
         this.issuanceServices = issuanceServices;
+        this.clock = clock;
     }
 
     @PostMapping(value = "/credential", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -116,7 +127,11 @@ public class CredentialController {
                     "proofs.jwt has " + proofJwts.size() + " entries, exceeding this issuer's batch_size of " + maxBatchSize);
         }
 
-        Map<String, String> claims = claimsStore.find(accessToken.getSubject())
+        // Expiry is enforced by the store, so an expired entry is indistinguishable from an absent
+        // one here -- which is right: both mean this token authorizes nothing. The token's own exp is
+        // checked by the resource server long before this point; this guards the claims themselves,
+        // which for a real issuer are somebody's passport details and should not outlive their use.
+        Map<String, String> claims = claimsStore.find(accessToken.getSubject(), clock.instant())
                 .orElseThrow(() -> new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "no claims on file for this access token"));
 
         CredentialIssuanceService issuanceService = issuanceServices.get(configuration.format());

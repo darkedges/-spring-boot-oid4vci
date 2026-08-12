@@ -71,7 +71,7 @@ class TokenControllerTest {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         String accessToken = MAPPER.readTree(response.getBody()).get("access_token").asText();
         AccessTokenService.AccessTokenClaims verified = accessTokenService.verify(accessToken);
-        assertThat(claimsStore.find(verified.subject())).contains(Map.of("given_name", "Jane"));
+        assertThat(claimsStore.find(verified.subject(), CLOCK.instant())).contains(Map.of("given_name", "Jane"));
     }
 
     @Test

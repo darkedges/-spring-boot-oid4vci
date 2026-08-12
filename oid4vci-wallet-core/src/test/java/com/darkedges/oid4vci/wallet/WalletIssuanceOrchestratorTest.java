@@ -136,7 +136,7 @@ class WalletIssuanceOrchestratorTest {
             PreAuthorizedCodeSession session = codeService.redeem(
                     new com.darkedges.oid4vci.core.token.PreAuthorizedCodeTokenRequest(preAuthorizedCode, txCode));
             AccessTokenService.IssuedAccessToken issued = accessTokenService.issue(session, CREDENTIAL_ISSUER.toString());
-            claimsStore.save(issued.subject(), session.claims());
+            claimsStore.save(issued.subject(), session.claims(), issued.expiresAt());
             return issued.tokenResponse();
         }
     }
@@ -166,7 +166,7 @@ class WalletIssuanceOrchestratorTest {
 
             String configurationId = request.credentialConfigurationId().orElseThrow();
             CredentialConfiguration configuration = configurations.get(configurationId);
-            Map<String, String> claims = claimsStore.find(tokenClaims.subject()).orElseThrow();
+            Map<String, String> claims = claimsStore.find(tokenClaims.subject(), CLOCK.instant()).orElseThrow();
 
             String raw = switch (configuration) {
                 case SdJwtVcCredentialConfiguration ignored -> sdJwtIssuance.issue(configuration, claims, holderKey, CREDENTIAL_ISSUER.toString());

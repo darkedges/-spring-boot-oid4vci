@@ -90,7 +90,7 @@ public final class AccessTokenService {
 
         String tokenType = dpopJkt.isPresent() ? "DPoP" : "Bearer";
         TokenResponse response = new TokenResponse(jwt.serialize(), tokenType, Optional.of(ttl.toSeconds()), Optional.empty());
-        return new IssuedAccessToken(response, subject);
+        return new IssuedAccessToken(response, subject, now.plus(ttl));
     }
 
     /** @throws Oid4vciException with {@link Oid4vciErrorCode#INVALID_TOKEN} if the token's signature is
@@ -137,5 +137,12 @@ public final class AccessTokenService {
 
     public record AccessTokenClaims(String subject, List<String> credentialConfigurationIds) {}
 
-    public record IssuedAccessToken(TokenResponse tokenResponse, String subject) {}
+    /**
+     * {@code expiresAt} is carried out so callers can bound anything they key on {@code subject}.
+     *
+     * The claim values held against a subject are useless the moment the token naming it expires,
+     * and for an issuer minting real identity credentials they are passport data -- so the store
+     * that holds them needs the same instant the JWT was signed with, not an approximation of it.
+     */
+    public record IssuedAccessToken(TokenResponse tokenResponse, String subject, Instant expiresAt) {}
 }
