@@ -13,13 +13,28 @@ services:
       context: ./oid4vci-demo-issuer
     ports:
       - "8092:8092"
+    # Survives a reboot and a crash. Without it the issuer stops when the machine does, and the
+    # symptom is remote and unhelpful: the wallet's proofing session simply never becomes ready,
+    # while the tunnel in front of it still answers -- a 502 rather than a refused connection.
+    restart: unless-stopped
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      # The secret the identity-proofing service presents on POST /proofing/result. Read from the
+      # environment, never written here: it is the only thing standing between anyone who can reach
+      # this host and a credential asserting any identity they choose.
+      #
+      # Unset means the endpoint refuses every call rather than accepting them, so a forgotten export
+      # fails closed and says so in the log. Set the same value on the proofing service; in Kubernetes
+      # it lives in the identity-proofing-issuer Secret.
+      #
+      #   export PROOFING_CALLBACK_SECRET="$(openssl rand -base64 32)"
+      - PROOFING_CALLBACK_SECRET=${PROOFING_CALLBACK_SECRET:-}
 
   wallet:
     build:
       context: ./oid4vci-demo-wallet
     ports:
       - "8093:8093"
+    restart: unless-stopped
     depends_on:
       - issuer
