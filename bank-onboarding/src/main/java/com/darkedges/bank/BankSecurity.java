@@ -75,7 +75,11 @@ public class BankSecurity {
             .csrf(c -> c.disable()).authorizeHttpRequests(a -> a.requestMatchers("/credential").authenticated().anyRequest().permitAll())
             .oauth2ResourceServer(o -> o.jwt(j -> {})).build();
     }
-    @Bean @Order(2) SecurityFilterChain portal(HttpSecurity http, @Value("${bank.hr-claim:roles}") String hrClaim) throws Exception {
+    /** HR access only ever comes from the HR provider: a staff sign-in through AuthStack never grants it, whatever its token carries. */
+    static boolean grantsHr(String registrationId, org.springframework.security.oauth2.core.oidc.user.OidcUser user, String claim) {
+        return "hr".equals(registrationId) && hasHrAccess(user, claim);
+    }
+    @Bean @Order(2) SecurityFilterChain portal(HttpSecurity http, @Value("${bank.hr-claim:roles}") String hrClaim, StaffSignIn staffSignIn) throws Exception {
         OidcUserService delegate = new OidcUserService();
         return http.csrf(c -> c.ignoringRequestMatchers("/vp/response/**"))
             .authorizeHttpRequests(a -> a.requestMatchers("/hr", "/hr/**").hasAuthority("BANK_HR").requestMatchers("/account/**").authenticated().anyRequest().permitAll())
@@ -84,10 +88,14 @@ public class BankSecurity {
                 request.getRequestDispatcher("/account/access").forward(request, response);
             }))
             .logout(l -> l.invalidateHttpSession(true).clearAuthentication(true).deleteCookies("JSESSIONID").logoutSuccessUrl("/"))
-            .oauth2Login(o -> o.userInfoEndpoint(u -> u.oidcUserService(request -> {
+            // HR pages send a signed-out browser straight to the HR provider, as they did when it was the only one (with a second, staff,
+            // registration Spring would otherwise show its own choice page). A staff sign-in goes to /oauth2/authorization/staff.
+            .oauth2Login(o -> o.loginPage("/oauth2/authorization/hr").failureUrl("/?signin=failed")
+                .successHandler(staffSignIn.successHandler())
+                .userInfoEndpoint(u -> u.oidcUserService(request -> {
                 var user = delegate.loadUser(request);
                 var authorities = new ArrayList<org.springframework.security.core.GrantedAuthority>(user.getAuthorities());
-                if (hasHrAccess(user, hrClaim)) authorities.add(new SimpleGrantedAuthority("BANK_HR"));
+                if (grantsHr(request.getClientRegistration().getRegistrationId(), user, hrClaim)) authorities.add(new SimpleGrantedAuthority("BANK_HR"));
                 return new DefaultOidcUser(authorities, user.getIdToken(), user.getUserInfo());
             }))).build();
     }

@@ -204,6 +204,25 @@ The startup schema adds `bank_applicant_ref`, and `channel` and `consumed_at` co
 their expiry from the database's clock, which is also what checks it. The portal's own `Present` action now also refuses a hire that is
 no longer awaiting identity, and a presentation that fails verification answers 400 rather than a server error.
 
+## Staff sign-in through AuthStack
+
+With `SPRING_PROFILES_ACTIVE=authstack-staff`, the home page's **Sign in with staff wallet** goes through AuthStack. It replaces the bank
+page's own wallet sign-in, which comes back when the profile is off. The isolated showcase therefore keeps its recorded flow. The steps
+are:
+
+1. The browser goes to Authr's hosted sign-on page, which runs the `bank-staff-signin` flow.
+2. The wallet presents the staff credential to this bank's `/vp/response`. Every check is unchanged.
+3. The flow takes the result through the Journey API, which checks again that the staff member is still active.
+4. AuthStack issues an authorization code for the identity `staff-<staff id>@<BANK_STAFF_EMAIL_DOMAIN>`.
+5. The bank exchanges the code with its client secret. It reads the staff id back from the ID token's email and checks the staff member
+   is active and not superseded. Only then does it give the browser the same staff session a portal sign-in gives.
+
+`/staff` checks the staff member again on every request, so revoking approval still ends access at once. The AuthStack sign-in itself is not
+kept, and it never grants HR access: the HR role comes only from the HR provider.
+
+The values come from the authstack repo's `terraform/risk-e-bank` outputs: `bank_staff_env` and `staffPortalClientSecret`. To switch it off,
+remove `SPRING_PROFILES_ACTIVE`.
+
 ## Validation limits
 
 Run module tests through Maven, wallet TypeScript checks, backend pytest, and the Android walkthrough. Provider registration, live PostgreSQL, and real-device acceptance require operator configuration. This implementation has not yet been validated against those live systems.
