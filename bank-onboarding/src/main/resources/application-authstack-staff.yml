@@ -1,0 +1,23 @@
+# Staff sign-in through AuthStack (SPRING_PROFILES_ACTIVE=authstack-staff). The values come from the authstack repo's terraform/risk-e-bank
+# outputs (bank_staff_env, staffPortalClientSecret). The browser is sent to Authr's hosted sign-on page (the bank-staff-signin flow), not to
+# AuthStack's own authorize endpoint; the code is exchanged at AuthStack with the client secret. See StaffSignIn.
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          staff:
+            provider: staff
+            client-name: Staff wallet sign-in
+            client-id: ${BANK_STAFF_OIDC_CLIENT_ID}
+            client-secret: ${BANK_STAFF_OIDC_CLIENT_SECRET}
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: authorization_code
+            redirect-uri: "${BANK_BASE_URL:https://hr.bank.darkedges.com}/login/oauth2/code/{registrationId}"
+            scope: openid,email
+        provider:
+          staff:
+            issuer-uri: ${BANK_STAFF_OIDC_ISSUER}
+            authorization-uri: ${BANK_STAFF_OIDC_AUTHORIZATION_URI}
+bank:
+  staff-email-domain: ${BANK_STAFF_EMAIL_DOMAIN:staff.bank.darkedges.com}

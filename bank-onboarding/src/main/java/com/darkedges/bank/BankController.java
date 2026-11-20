@@ -60,7 +60,14 @@ public class BankController {
         var session=request.getSession(false);
         return signedIn || (session!=null && (session.getAttribute("staff")!=null || session.getAttribute("hire")!=null));
     }
-    @ModelAttribute void branding(Model m) { m.addAttribute("bankName",name); m.addAttribute("mailEnabled",invitationEmail != null && invitationEmail.enabled()); }
+    private boolean staffSso;
+    /** Staff can sign in through AuthStack when the "staff" registration is configured (profile authstack-staff, see StaffSignIn). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setClientRegistrations(org.springframework.beans.factory.ObjectProvider<org.springframework.security.oauth2.client.registration.ClientRegistrationRepository> registrations) {
+        var repository = registrations.getIfAvailable();
+        staffSso = repository != null && repository.findByRegistrationId(StaffSignIn.REGISTRATION) != null;
+    }
+    @ModelAttribute void branding(Model m) { m.addAttribute("bankName",name); m.addAttribute("mailEnabled",invitationEmail != null && invitationEmail.enabled()); m.addAttribute("staffSso",staffSso); }
     @GetMapping("/") String home() { return "home"; }
     @GetMapping({"/hr", "/hr/"}) String hires(Model m) { var rows=db.queryForList("select h.*, followup.id as next_hire_id from bank_hire h left join bank_hire followup on followup.previous_hire_id=h.id order by h.created_at desc");
         for(var h:rows) h.put("mismatch",h.get("verified_family")!=null && (!normalize((String)h.get("expected_given")).equals(normalize((String)h.get("verified_given"))) || !normalize((String)h.get("expected_family")).equals(normalize((String)h.get("verified_family"))) || !h.get("birth_date").equals(h.get("verified_birth"))));
