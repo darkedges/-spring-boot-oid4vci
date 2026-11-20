@@ -198,7 +198,11 @@ off. `BANK_JOURNEY_JWK_SET_URI` overrides key discovery.
 
 `BANK_APPLICANT_ENTRY=authr` with `BANK_APPLICANT_ENTRY_URL` makes new invitation links open the Authr journey
 (`<url>#invite=<token>`: in the fragment, so the token never reaches a server log). The default, `portal`, keeps `/invite/{token}`; links
-already sent keep working either way.
+already sent keep working either way. In `authr` mode, this portal's own applicant pages are retired:
+- `/onboarding`, `/onboarding/present` and `/onboarding/offer` answer 404;
+- an old `/invite/{token}` link forwards to the Authr journey, with the token moved into the URL fragment.
+
+Likewise, `/staff/login` answers 404 while staff sign in through AuthStack. Switching either setting back restores the pages.
 
 The startup schema adds `bank_applicant_ref`, and `channel` and `consumed_at` columns. Presentations and applicant references now take
 their expiry from the database's clock, which is also what checks it. The portal's own `Present` action now also refuses a hire that is
@@ -217,7 +221,9 @@ are:
 5. The bank exchanges the code with its client secret. It reads the staff id back from the ID token's email and checks the staff member
    is active and not superseded. Only then does it give the browser the same staff session a portal sign-in gives.
 
-`/staff` checks the staff member again on every request, so revoking approval still ends access at once. The AuthStack sign-in itself is not
+`/staff` checks the staff member again on every request, so revoking approval still ends access at once. **Log out** ends the staff
+session completely: the sign-in leaves no session at AuthStack or Authr (`bank-staff-signin` has no single sign-on), so the next sign-in
+always asks for the wallet again. The AuthStack sign-in itself is not
 kept, and it never grants HR access: the HR role comes only from the HR provider.
 
 The values come from the authstack repo's `terraform/risk-e-bank` outputs: `bank_staff_env` and `staffPortalClientSecret`. To switch it off,

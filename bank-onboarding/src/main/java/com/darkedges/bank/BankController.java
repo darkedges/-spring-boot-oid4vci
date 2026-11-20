@@ -32,8 +32,13 @@ public class BankController {
     /** Where an invitation link sends the applicant: this portal, or (bank.applicant-entry=authr) the Authr applicant journey. The token
      *  travels in the URL fragment there, so it never reaches a server log or a Referer header. */
     String invitationLink(String invitation) {
-        if ("authr".equals(applicantEntry) && !applicantEntryUrl.isBlank()) return applicantEntryUrl + "#invite=" + invitation;
+        if (applicantJourneyInAuthr()) return applicantEntryUrl + "#invite=" + invitation;
         return base + "/invite/" + invitation;
+    }
+    boolean applicantJourneyInAuthr() { return "authr".equals(applicantEntry) && !applicantEntryUrl.isBlank(); }
+    /** The portal's own applicant pages are retired while the journey runs in Authr: they answer 404. */
+    void requirePortalApplicantPages() {
+        if (applicantJourneyInAuthr()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
     }
     private void deliverInvitation(String email, String link, Model model) {
         model.addAttribute("invite", link);
@@ -156,6 +161,8 @@ public class BankController {
         return "redirect:/hr";
     }
     @GetMapping("/invite/{token}") String claim(@PathVariable String token,HttpSession session,jakarta.servlet.http.HttpServletRequest servletRequest) {
+        // A link sent before the journey moved to Authr still works: it opens the Authr journey, the token moving into the URL fragment.
+        if (applicantJourneyInAuthr()) return "redirect:" + invitationLink(token);
         var rows=db.queryForList("select id from bank_hire where invite_hash=? and invite_expires>now() and status not in ('CANCELLED','REJECTED','INACTIVE','REVOKED')",hash(token));
         require(rows.size()==1,"Invitation is invalid or expired");
         // Rotation prevents an observed pre-existing session identifier from becoming the applicant session.
@@ -163,12 +170,17 @@ public class BankController {
         return "redirect:/onboarding";
     }
     @GetMapping({"/onboarding", "/onboarding/"}) String progress(HttpSession session, Model m) {
+        requirePortalApplicantPages();
         UUID id=applicant(session); var h=db.queryForMap("select * from bank_hire where id=?",id);
         m.addAttribute("hire",h); m.addAttribute("passportIssuer",passportIssuer); return "onboarding";
     }
     UUID applicant(HttpSession session) { Object id=session.getAttribute("hire"); require(id!=null,"Open your invitation first"); return UUID.fromString(id.toString()); }
-    @PostMapping("/onboarding/present") String present(HttpSession session,Model m) { UUID hire=applicant(session); require(awaitingIdentity(hire),"This invitation is not awaiting identity"); return start(hire,session,m); }
-    @PostMapping("/staff/login") String login(HttpSession session,Model m) { return start(null,session,m); }
+    @PostMapping("/onboarding/present") String present(HttpSession session,Model m) { requirePortalApplicantPages(); UUID hire=applicant(session); require(awaitingIdentity(hire),"This invitation is not awaiting identity"); return start(hire,session,m); }
+    /** The bank page's own staff sign-in; retired (404) while staff sign in through AuthStack. */
+    @PostMapping("/staff/login") String login(HttpSession session,Model m) {
+        if (staffSso) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        return start(null,session,m);
+    }
     String start(UUID hire,HttpSession session,Model m) {
         var p=newPresentation(hire,"portal"); session.setAttribute("vp:"+p.id(),p.secret());
         m.addAttribute("requestUrl",p.requestUri()); m.addAttribute("walletUrl",p.walletUri()); m.addAttribute("resultUrl","/vp/result/"+p.id()); m.addAttribute("statusUrl","/vp/status/"+p.id()); m.addAttribute("qrImage",WalletQr.image(p.walletUri())); return "presentation";
@@ -243,6 +255,7 @@ public class BankController {
         return "redirect:/onboarding";
     }
     @PostMapping("/onboarding/offer") String offer(HttpSession session,Model model) throws Exception {
+        requirePortalApplicantPages();
         var h=db.queryForMap("select * from bank_hire where id=?",applicant(session)); require(Set.of("APPROVED","ACTIVE").contains(h.get("status")),"HR approval required");
         String offer=staffOffer(h); model.addAttribute("offer",offer); model.addAttribute("walletUrl",offerUri(offer)); model.addAttribute("qrImage",WalletQr.image((String)model.getAttribute("walletUrl"))); return "offer";
     }
