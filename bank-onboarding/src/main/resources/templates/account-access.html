@@ -1,0 +1,45 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your bank access</title>
+<style>body{font:17px system-ui;max-width:700px;margin:4rem auto;padding:1.5rem;color:#183042}button{font:inherit;padding:.7rem}code{overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f7fa;padding:1rem}textarea{width:100%;box-sizing:border-box}details{margin:1rem 0}</style></head>
+<body>
+<h1>Your bank access</h1>
+<div th:unless="${hrAccess}">
+<p>You are signed in, but this account does not have bank HR access.</p>
+<p>The account needs a <code th:text="${hrClaim}"></code> claim containing the exact value <code>bank-hr</code>. After changing group assignments, sign out and sign in again to refresh this bank session.</p>
+</div>
+<p th:if="${hrAccess}">This account has HR access. <a href="/hr">Open HR administration</a>.</p>
+<h2>Roles received for this account</h2>
+<p th:unless="${rolesPresent}">The identity provider did not return the configured access claim.</p>
+<p th:if="${rolesPresent and !rolesArray}">The configured claim has an unsupported format. Roles must be an array; groups may be a string or an array.</p>
+<ul th:if="${rolesArray}"><li th:each="role:${roles}"><code th:text="${role}"></code></li></ul>
+<p th:if="${rolesArray and #lists.isEmpty(roles)}">The roles array is empty.</p>
+<section th:if="${tokenDebugEnabled}">
+<h2>Token debug</h2>
+<p>These tokens belong to your current login session. Keep them private. Access-token claims below are decoded for inspection and are not used to grant access.</p>
+<details open><summary>ID token claims</summary><pre th:text="${idTokenClaims}"></pre></details>
+<details><summary>Raw ID token</summary><textarea id="id-token-raw" readonly rows="5" th:text="${idTokenRaw}"></textarea><button type="button" data-copy-target="id-token-raw">Copy ID token</button></details>
+<details th:if="${userInfoClaims != null}"><summary>UserInfo claims</summary><pre th:text="${userInfoClaims}"></pre></details>
+<div th:if="${accessTokenAvailable}">
+<p>Access token scopes: <span th:text="${accessTokenScopes}"></span></p>
+<p>Access token expires: <span th:text="${accessTokenExpiresAt}"></span></p>
+<details open><summary>Decoded access token</summary><pre th:if="${accessTokenHeader != null}" th:text="${accessTokenHeader}"></pre><pre th:if="${accessTokenClaims != null}" th:text="${accessTokenClaims}"></pre><p th:if="${accessTokenClaims == null}">This token could not be decoded locally. It may be opaque or encrypted.</p></details>
+<details><summary>Raw access token</summary><textarea id="access-token-raw" readonly rows="5" th:text="${accessTokenRaw}"></textarea><button type="button" data-copy-target="access-token-raw">Copy access token</button></details>
+</div>
+<p th:unless="${accessTokenAvailable}">No access token was found for this login session.</p>
+<p role="status" id="copy-status"></p>
+</section>
+<script>
+document.querySelectorAll('[data-copy-target]').forEach(button => button.addEventListener('click', async () => {
+    const field = document.getElementById(button.dataset.copyTarget);
+    try {
+        await navigator.clipboard.writeText(field.value);
+        document.getElementById('copy-status').textContent = 'Copied.';
+    } catch {
+        field.focus(); field.select();
+        document.getElementById('copy-status').textContent = 'Select and copy the token from the field.';
+    }
+}));
+</script>
+<form method="post" th:action="@{/logout}"><button>Sign out</button></form>
+</body></html>

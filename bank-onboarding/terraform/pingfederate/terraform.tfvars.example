@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and replace every environment-specific value.
+admin_url               = "https://pf-admin.example.com:9999"
+product_version         = "12.3"
+access_token_manager_id = "REPLACE_WITH_EXISTING_ATM_ID"
+subject_attribute       = "REPLACE_WITH_STABLE_USER_ID_ATTRIBUTE"
+roles_attribute         = "REPLACE_WITH_AUTHENTICATED_ROLES_OR_GROUPS_ATTRIBUTE"
+
+client_id     = "example-bank-hr"
+bank_name     = "Risk E Bank"
+bank_base_url = "https://hr.bank.darkedges.com"
+issuer_url    = "https://id.ping.darkedges.com"
+
+# Optional for a private admin API CA:
+# ca_certificate_pem_files = ["C:/secure/ping-admin-root-ca.pem"]
+# Secrets belong in environment variables, not this file.

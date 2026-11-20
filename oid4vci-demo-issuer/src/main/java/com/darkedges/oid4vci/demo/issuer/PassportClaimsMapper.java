@@ -55,7 +55,8 @@ public final class PassportClaimsMapper {
             // from two different models is a meaningless number that looks exactly like a real one.
             claims.put("face_template_format", FACE_TEMPLATE_FORMAT);
         }
-        claims.put("assurance_level", "poc-demo");
+        claims.put("proofed_at", clock.instant().toString());
+        claims.put("assurance_level", "showcase".equals(System.getProperty("spring.profiles.active")) && Boolean.getBoolean("showcase.simulated") ? "showcase-simulated" : "poc-demo");
         claims.put("evidence", describeEvidence(result));
         return Map.copyOf(claims);
     }

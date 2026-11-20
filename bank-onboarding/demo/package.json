@@ -1,0 +1,23 @@
+{
+  "name": "risk-e-bank-showcase",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "up": "node control.mjs up",
+    "down": "node control.mjs down",
+    "check": "node control.mjs check",
+    "check:polling": "node check-polling.mjs",
+    "reset": "node control.mjs reset",
+    "rehearse": "node record.mjs --rehearse",
+    "record": "node record.mjs",
+    "shorten": "node shorten.mjs",
+    "voiceover": "node control.mjs voiceover",
+    "demo": "node control.mjs demo"
+  },
+  "dependencies": {
+    "playwright": "1.58.2",
+    "jose": "6.1.3",
+    "jsqr": "1.4.0",
+    "pngjs": "7.0.0"
+  }
+}

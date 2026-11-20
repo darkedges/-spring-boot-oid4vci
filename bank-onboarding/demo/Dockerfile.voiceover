@@ -1,0 +1,8 @@
+# Renders demo/voiceover.json with Kokoro-82M (CPU). Model weights are cached in the demo-models volume.
+FROM python:3.12.12-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng libsndfile1 && rm -rf /var/lib/apt/lists/*
+COPY requirements-voiceover.txt /tmp/requirements-voiceover.txt
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu torch && pip install --no-cache-dir -r /tmp/requirements-voiceover.txt
+ENV HF_HOME=/cache/huggingface PYTHONUNBUFFERED=1
+WORKDIR /work
+ENTRYPOINT ["python", "/demo/generate-voiceover.py"]

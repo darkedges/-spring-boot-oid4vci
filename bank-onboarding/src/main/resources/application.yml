@@ -1,0 +1,72 @@
+server:
+  port: 8094
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: ${BANK_COOKIE_SECURE:true}
+        same-site: lax
+spring:
+  mail:
+    host: ${BANK_SMTP_HOST:smtp.mailgun.org}
+    port: ${BANK_SMTP_PORT:587}
+    username: ${BANK_SMTP_USERNAME:}
+    password: ${BANK_SMTP_PASSWORD:}
+    properties:
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
+      "[mail.smtp.starttls.required]": true
+      "[mail.smtp.ssl.checkserveridentity]": true
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 10000
+      "[mail.smtp.writetimeout]": 10000
+  datasource:
+    url: ${BANK_DATABASE_URL:jdbc:postgresql://localhost:${BANK_DATABASE_PORT:15432}/bank}
+    username: ${BANK_DATABASE_USER:bank}
+    password: ${BANK_DATABASE_PASSWORD}
+  sql:
+    init:
+      mode: always
+  security:
+    oauth2:
+      client:
+        registration:
+          hr:
+            provider: hr
+            client-id: ${BANK_OIDC_CLIENT_ID}
+            client-secret: ${BANK_OIDC_CLIENT_SECRET}
+            authorization-grant-type: authorization_code
+            redirect-uri: "${BANK_BASE_URL:https://hr.bank.darkedges.com}/login/oauth2/code/{registrationId}"
+            scope: openid,profile
+        provider:
+          hr:
+            issuer-uri: ${BANK_OIDC_ISSUER:https://id.ping.darkedges.com}
+bank:
+  mail:
+    enabled: ${BANK_MAIL_ENABLED:false}
+    from: ${BANK_MAIL_FROM:}
+  hr-claim: ${BANK_HR_CLAIM:roles}
+  token-debug-enabled: ${BANK_TOKEN_DEBUG_ENABLED:false}
+  name: ${BANK_NAME:Risk E Bank}
+  base-url: ${BANK_BASE_URL:https://hr.bank.darkedges.com}
+  passport-issuer: ${PASSPORT_ISSUER:https://issuer.zkp.au}
+  passport-key-file: ${PASSPORT_PUBLIC_JWK_FILE}
+  signing-key-file: ${BANK_PRIVATE_JWK_FILE}
+  # Where invitation links send applicants: this portal (portal) or the Authr applicant journey (authr, at applicant-entry-url).
+  applicant-entry: ${BANK_APPLICANT_ENTRY:portal}
+  applicant-entry-url: ${BANK_APPLICANT_ENTRY_URL:}
+  # The Journey API (/api/journey/v1) for Authr. Off until an issuer is set.
+  journey:
+    issuer: ${BANK_JOURNEY_ISSUER:}
+    jwk-set-uri: ${BANK_JOURNEY_JWK_SET_URI:}
+    audience: ${BANK_JOURNEY_AUDIENCE:bank-journey}
+    scope: ${BANK_JOURNEY_SCOPE:bank.journey}
+    clients: ${BANK_JOURNEY_CLIENTS:}
+    staff-sign-in-per-minute: ${BANK_JOURNEY_STAFF_SIGN_IN_PER_MINUTE:60}
+oid4vci:
+  issuer:
+    credential-configurations-supported: >
+      {"BankStaffCredential":{"format":"dc+sd-jwt","vct":"/vct/BankStaffCredential","scope":"BankStaffCredential",
+      "claims":[{"path":["staff_id"]},{"path":["bank_id"]},{"path":["given_name"]},{"path":["family_name"]},{"path":["department"]}],
+      "proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},"cryptographic_binding_methods_supported":["jwk"]}}

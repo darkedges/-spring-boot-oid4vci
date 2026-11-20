@@ -47,7 +47,7 @@ public class DemoOfferController {
     @GetMapping(value = "/demo/offer", produces = MediaType.APPLICATION_JSON_VALUE)
     public String offer(HttpServletRequest servletRequest) {
         CredentialIssuerMetadata metadata = template.resolve(RequestBaseUrl.resolve(servletRequest));
-        List<String> configurationIds = List.copyOf(metadata.credentialConfigurationsSupported().keySet());
+        List<String> configurationIds = metadata.credentialConfigurationsSupported().keySet().stream().filter(id -> !"PassportCredential".equals(id)).toList();
         String code = randomCode();
 
         codeStore.save(code, new PreAuthorizedCodeSession(

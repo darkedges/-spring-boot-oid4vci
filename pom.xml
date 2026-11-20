@@ -38,6 +38,7 @@
   </properties>
 
   <modules>
+    <module>bank-onboarding</module>
     <module>oid4vci-core</module>
     <module>oid4vci-test-fixtures</module>
     <module>oid4vci-issuer-core</module>
