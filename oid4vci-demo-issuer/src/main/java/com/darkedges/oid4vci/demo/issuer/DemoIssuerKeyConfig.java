@@ -47,6 +47,9 @@ public class DemoIssuerKeyConfig {
 
     @Bean
     public ECKey issuerSigningKey() throws Exception {
+        if ("showcase".equals(System.getProperty("spring.profiles.active")) && System.getProperty("showcase.signing-key-file") != null) {
+            return ECKey.parse(java.nio.file.Files.readString(java.nio.file.Path.of(System.getProperty("showcase.signing-key-file"))));
+        }
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
         try (InputStream in = DemoIssuerKeyConfig.class.getResourceAsStream("/demo-issuer-signing-key.p12")) {
             keyStore.load(in, PASSWORD);

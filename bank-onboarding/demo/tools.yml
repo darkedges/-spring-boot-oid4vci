@@ -1,0 +1,14 @@
+name: risk-e-onboarding-showcase-tools
+services:
+  voiceover:
+    build: {context: ., dockerfile: Dockerfile.voiceover}
+    command: [--script, /demo/voiceover.json, --output, /work/artifacts/voiceover.wav]
+    volumes: ['.:/demo:ro', './artifacts:/work/artifacts', 'models:/cache']
+volumes:
+  models:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.244.78.0/24

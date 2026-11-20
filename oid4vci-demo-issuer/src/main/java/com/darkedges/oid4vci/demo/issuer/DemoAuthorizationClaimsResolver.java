@@ -18,6 +18,7 @@ public class DemoAuthorizationClaimsResolver implements AuthorizationClaimsResol
 
     @Override
     public Map<String, String> resolveClaims(List<String> credentialConfigurationIds) {
+        if (credentialConfigurationIds.contains("PassportCredential")) throw new com.darkedges.oid4vci.core.error.Oid4vciException(com.darkedges.oid4vci.core.error.Oid4vciErrorCode.INVALID_REQUEST,"PassportCredential requires identity proofing");
         return Map.of("given_name", "Jane", "family_name", "Doe");
     }
 }

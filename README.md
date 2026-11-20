@@ -236,3 +236,7 @@ theory:
   none of OID4VCI's v1 endpoints need a novel authentication mechanism. The Token Endpoint mints a bearer
   token as ordinary business logic; the Credential Endpoint is protected by a standard OAuth2 bearer
   access token, which Spring Security's built-in `oauth2ResourceServer()` already solves.
+
+## Bank staff onboarding
+
+See [bank-onboarding](bank-onboarding/README.md) for the PostgreSQL-backed HR portal, passport credential presentation, bank staff issuance, and wallet sign-in.

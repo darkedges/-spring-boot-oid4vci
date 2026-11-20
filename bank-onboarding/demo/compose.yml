@@ -1,0 +1,58 @@
+name: risk-e-onboarding-showcase
+services:
+  db:
+    image: postgres:17
+    environment: {POSTGRES_DB: showcase, POSTGRES_USER: showcase, POSTGRES_PASSWORD: showcase-local-only}
+    volumes: [database:/var/lib/postgresql/data]
+    healthcheck: {test: [CMD-SHELL, pg_isready -U showcase], interval: 2s, timeout: 2s, retries: 30}
+  idp:
+    image: quay.io/keycloak/keycloak:26.5.4
+    command: [start-dev, --import-realm]
+    environment: {KC_BOOTSTRAP_ADMIN_USERNAME: admin, KC_BOOTSTRAP_ADMIN_PASSWORD: showcase-local-only, KC_HOSTNAME: 'http://localhost:43180'}
+    ports: ['127.0.0.1:43180:8080']
+    volumes: ['./realm.json:/opt/keycloak/data/import/realm.json:ro']
+  mail:
+    image: axllent/mailpit:v1.29.2
+    ports: ['127.0.0.1:43126:8025']
+  issuer:
+    image: eclipse-temurin:21-jre
+    command: [java, '-Dspring.profiles.active=showcase', '-Dshowcase.signing-key-file=/keys/passport.jwk', '-Dshowcase.simulated=true', -jar, /app/issuer.jar]
+    ports: ['127.0.0.1:43192:8092']
+    environment: {PROOFING_CALLBACK_SECRET: '${SHOWCASE_CALLBACK_SECRET:?Run npm run up}'}
+    volumes: ['../../oid4vci-demo-issuer/target/oid4vci-demo-issuer.jar:/app/issuer.jar:ro', './runtime/keys:/keys:ro']
+  bank:
+    image: eclipse-temurin:21-jre
+    command: [java, '-Dspring.profiles.active=showcase', '-Dshowcase.simulated=true', -jar, /app/bank.jar]
+    ports: ['127.0.0.1:43194:8094']
+    depends_on: {db: {condition: service_healthy}}
+    environment:
+      BANK_NAME: Risk E Bank — Isolated Demonstration
+      BANK_BASE_URL: http://localhost:43194
+      BANK_COOKIE_SECURE: 'false'
+      BANK_DATABASE_URL: jdbc:postgresql://db:5432/showcase
+      BANK_DATABASE_USER: showcase
+      BANK_DATABASE_PASSWORD: showcase-local-only
+      BANK_PRIVATE_JWK_FILE: /keys/bank.jwk
+      PASSPORT_ISSUER: http://localhost:43192
+      PASSPORT_PUBLIC_JWK_FILE: /keys/passport-public.jwk
+      BANK_OIDC_CLIENT_ID: risk-e-hr
+      BANK_OIDC_CLIENT_SECRET: showcase-client-only
+      BANK_OIDC_ISSUER: http://localhost:43180/realms/risk-e-demo
+      SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_HR_AUTHORIZATION_URI: http://localhost:43180/realms/risk-e-demo/protocol/openid-connect/auth
+      SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_HR_TOKEN_URI: http://idp:8080/realms/risk-e-demo/protocol/openid-connect/token
+      SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_HR_JWK_SET_URI: http://idp:8080/realms/risk-e-demo/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_HR_USER_INFO_URI: http://idp:8080/realms/risk-e-demo/protocol/openid-connect/userinfo
+      BANK_MAIL_ENABLED: 'true'
+      BANK_MAIL_FROM: hr@risk-e.example.test
+      BANK_SMTP_HOST: mail
+      BANK_SMTP_PORT: '1025'
+    volumes: ['./runtime/bank-target/bank-onboarding-0.1.0-SNAPSHOT.jar:/app/bank.jar:ro', './runtime/keys:/keys:ro', './bank-showcase.yml:/app/application-showcase.yml:ro']
+    working_dir: /app
+volumes:
+  database:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.244.77.0/24

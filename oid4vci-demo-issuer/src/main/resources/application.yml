@@ -40,7 +40,7 @@ oid4vci:
       {"path":["nationality"],"mandatory":true},{"path":["issuing_state"],"mandatory":true},
       {"path":["expiry_date"],"mandatory":true},{"path":["face_template"]},
       {"path":["face_template_format"]},{"path":["assurance_level"],"mandatory":true},
-      {"path":["evidence"],"mandatory":true}],
+      {"path":["proofed_at"]},{"path":["evidence"],"mandatory":true}],
       "proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},
       "cryptographic_binding_methods_supported":["jwk"]},
       "org.iso.18013.5.1.mDL":{"format":"mso_mdoc","doctype":"org.iso.18013.5.1.mDL","scope":"org.iso.18013.5.1.mDL",

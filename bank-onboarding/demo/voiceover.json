@@ -1,0 +1,129 @@
+{
+  "title": "Risk E Bank: staff identity and credential lifecycle",
+  "duration_seconds": 411.66,
+  "model": "hexgrad/Kokoro-82M",
+  "language": "b",
+  "voice": "bf_emma",
+  "speed": 1.05,
+  "cues": [
+    {
+      "start": 0.5,
+      "scene": 1,
+      "label": "Risk E Bank: identity to staff access",
+      "action": "title",
+      "text": "Risk E Bank is a fictional bank. This demonstration follows one new staff member from an HR invitation to credential-based sign-in. The bank and credential protocols are real. Passport capture and biometric findings are explicitly simulated, with isolated identities, keys, email and data. No physical Passport or Android secure storage is being demonstrated."
+    },
+    {
+      "start": 24.52,
+      "scene": 2,
+      "label": "HR signs in",
+      "action": "hr_login",
+      "text": "Our HR operator signs in through an isolated OpenID Connect provider. The account carries the bank HR role. This is separate from staff wallet sign-in: HR manages employment decisions, while the new staff member will prove possession of a bank-issued credential."
+    },
+    {
+      "start": 43.09,
+      "scene": 3,
+      "label": "HR raises the request",
+      "action": "hire",
+      "text": "HR creates Morgan Example\u2019s onboarding record using the expected recruitment identity, date of birth, contact address and department. The bank creates a personal invitation. At this point Morgan has no staff access, and no approval has been granted. The invitation establishes which recruitment record the later identity presentation must satisfy."
+    },
+    {
+      "start": 66.24,
+      "scene": 4,
+      "label": "The invitation arrives",
+      "action": "email",
+      "text": "The bank sends the invitation through SMTP into this local demo mailbox. We open the actual message and follow its onboarding link. The mailbox replaces Mailgun only in this isolated stack. Invitation links are personal and expire; receiving one does not grant staff access."
+    },
+    {
+      "start": 85.22,
+      "scene": 5,
+      "label": "A Passport presentation request",
+      "action": "request",
+      "text": "Morgan starts a Passport presentation. The bank creates a request containing the required claims, a nonce and an expiry. The wallet reads the actual QR payload through the demo scan bridge. Because this fresh wallet has no Passport credential, it opens Identity Proofing. The bridge simulates app switching, not a successful protocol response."
+    },
+    {
+      "start": 107.37,
+      "scene": 6,
+      "label": "SIMULATED Passport and liveness checks",
+      "action": "proof",
+      "text": "The mobile interface now runs through consent, movement challenges, Passport details and a simulated chip read. Every person and document is fictional. These are synthetic findings, not verified national document evidence. A demo-only adapter reports the synthetic result to the isolated issuer through its authenticated callback. That issuer uses a dedicated key and stamps the proofing time. Its simulation assurance is accepted only by the demo bank, not by the ordinary bank configuration."
+    },
+    {
+      "start": 139.27,
+      "scene": 7,
+      "label": "Consent and holder-bound presentation",
+      "action": "passport_present",
+      "text": "Identity Proofing returns control to the wallet. Morgan accepts the Passport offer and the wallet obtains a signed, holder-bound credential. The wallet validates it before resuming the original bank request. Morgan reviews the disclosures and approves sending them. The bank validates the signature, holder proof, nonce, expiry and required evidence. Browser polling detects the accepted presentation."
+    },
+    {
+      "start": 165.27,
+      "scene": 8,
+      "label": "HR reviews and approves",
+      "action": "approve",
+      "text": "The HR page detects the completed identity presentation automatically. HR compares the Passport identity with the recruitment record and explicitly approves it. Proofing did not approve employment: this is a separate decision by the bank. Morgan is now authorized to collect a staff credential, but still needs to obtain it into the wallet."
+    },
+    {
+      "start": 186.92,
+      "scene": 9,
+      "label": "The bank issues a staff credential",
+      "action": "collect",
+      "text": "Morgan opens the approved staff credential offer in the same wallet that presented the Passport. The bank checks that approval is still valid and that the holder key matches. After Morgan accepts, the bank issues a staff credential. Its staff identifier is separate from the Passport identity. The wallet stores one validated current credential for this bank and type."
+    },
+    {
+      "start": 209.44,
+      "scene": 10,
+      "label": "A new staff member signs in",
+      "action": "signin",
+      "text": "Morgan starts staff sign-in from a fresh bank browser page. This request asks for the bank staff credential, not the Passport. The wallet selects the current credential, displays its staff identifier, and asks for consent. The bank validates the signed presentation and checks current staff status before establishing the browser session. A wallet success modal confirms acceptance, and closing it returns to wallet Home."
+    },
+    {
+      "start": 235.44,
+      "scene": 11,
+      "label": "HR revokes approval",
+      "action": "revoke",
+      "text": "HR now withdraws Morgan\u2019s approval with a recorded reason. The bank retains its audit history and previous identity evidence, but staff access is no longer active. Possession of a previously issued credential is not enough to regain access. The next scenes show enforcement against both an existing browser session and a new presentation."
+    },
+    {
+      "start": 257.42,
+      "scene": 12,
+      "label": "Old access is refused",
+      "action": "deny",
+      "text": "Refreshing the existing staff portal no longer grants access. Morgan also tries a fresh staff credential presentation using the retained old credential, and the bank rejects it. The wallet reports the unsuccessful presentation and returns Home when closed. This demonstrates that deleting a wallet copy is not the security boundary: the bank independently enforces current access state."
+    },
+    {
+      "start": 282.02,
+      "scene": 13,
+      "label": "Reactivation requires fresh proofing",
+      "action": "reverify",
+      "text": "HR starts reactivation and selects the option requiring a fresh Passport check. The bank creates a linked new attempt and records a freshness cutoff. Earlier attempts move into history instead of appearing as competing current records. The old Passport credential cannot satisfy this new requirement, so reactivation cannot be completed simply by replaying previously collected evidence."
+    },
+    {
+      "start": 306.79,
+      "scene": 14,
+      "label": "A fresh SIMULATED Passport check",
+      "action": "freshproof",
+      "text": "Morgan follows the replacement invitation and starts another Passport presentation. The wallet sees the bank\u2019s freshness requirement and opens a new simulated proofing session. The same mobile interfaces are used again, with synthetic liveness and chip findings clearly labelled. The issuer records a later proofing time. The bank checks that signed time against the HR requirement; a wallet-side flag alone cannot bypass it."
+    },
+    {
+      "start": 342.79,
+      "scene": 15,
+      "label": "HR authorizes reactivation",
+      "action": "approve_again",
+      "text": "The new Passport presentation arrives for HR review. HR approves this new attempt after comparing the recruitment and verified identity. The old attempt remains closed. Its history and revocation reason have not been erased, and approval of the new attempt does not silently restore the old staff credential."
+    },
+    {
+      "start": 363.19,
+      "scene": 16,
+      "label": "Replace the superseded credential",
+      "action": "collect_again",
+      "text": "Morgan collects the new approved staff credential. Before replacement, the wallet validates the new signature, expiry, disclosures and holder binding. It then removes the superseded matching credential. Re-downloading an older offer cannot downgrade the wallet, and an old copy kept elsewhere is still refused by the bank\u2019s canonical credential and supersession checks."
+    },
+    {
+      "start": 386.21,
+      "scene": 17,
+      "label": "Reactivated staff access",
+      "action": "signin_again",
+      "text": "Morgan signs in successfully with the replacement staff credential. We have shown a complete lifecycle: HR request, identity evidence, approval, credential issuance, sign-in, revocation and controlled recovery. Passport verification remains simulated in this recording. The credential exchanges and access decisions came from the actual applications running in the isolated demo environment."
+    }
+  ]
+}

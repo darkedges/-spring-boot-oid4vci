@@ -1,0 +1,34 @@
+import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+const dir=import.meta.dirname;
+process.chdir(dir);
+const script=JSON.parse(readFileSync('voiceover.json'));
+const timing=JSON.parse(readFileSync('artifacts/voiceover.timing.json'));
+const report=JSON.parse(readFileSync('artifacts/report.json'));
+if(timing.length!==script.cues.length||report.length!==script.cues.length)throw Error('A complete recording and narration timing report are required');
+let outputTime=0;
+const cuts=script.cues.map((cue,i)=>{
+ if(timing[i].text!==cue.text||timing[i].start!==cue.start||report[i].scene!==cue.scene)throw Error('Recording and narration do not match the script');
+ const start=Math.max(0,cue.start-.5);
+ const end=Math.min(script.cues[i+1]?.start-.5||script.duration_seconds,cue.start+Math.max(timing[i].duration,report[i].seconds)+1);
+ if(end<cue.start+Math.max(timing[i].duration,report[i].seconds))throw Error('A scene does not fit its recorded slot');
+ const cut={scene:cue.scene,start,end,outputStart:outputTime};outputTime+=end-start;return cut;
+});
+const stamp=s=>{const ms=Math.round(s*1000);return `${String(Math.floor(ms/3600000)).padStart(2,'0')}:${String(Math.floor(ms/60000)%60).padStart(2,'0')}:${String(Math.floor(ms/1000)%60).padStart(2,'0')},${String(ms%1000).padStart(3,'0')}`;};
+const seconds=s=>{const [h,m,v]=s.replace(',','.').split(':').map(Number);return h*3600+m*60+v;};
+const subtitles=readFileSync('artifacts/onboarding.srt','utf8').trim().split(/\r?\n\r?\n/).map((block,i)=>{
+ const lines=block.split(/\r?\n/);const [a,b]=lines[1].split(' --> ').map(seconds);
+ const cut=cuts.find(c=>a>=c.start-.001&&b<=c.end+.001);
+ if(!cut)throw Error('A subtitle would be cut off');
+ return `${i+1}\n${stamp(a-cut.start+cut.outputStart)} --> ${stamp(b-cut.start+cut.outputStart)}\n${lines.slice(2).join('\n')}\n`;
+});
+mkdirSync('artifacts/compact',{recursive:true});
+writeFileSync('artifacts/onboarding-short.srt',subtitles.join('\n'));
+writeFileSync('artifacts/compact/cuts.json',JSON.stringify({duration_seconds:outputTime,cuts},null,2));
+writeFileSync('artifacts/compact/segments.txt',cuts.map((_,i)=>`file 'scene-${i}.mp4'`).join('\n'));
+const commands=cuts.map((c,i)=>`ffmpeg -hide_banner -loglevel error -y -ss ${c.start.toFixed(3)} -i /work/onboarding.mp4 -t ${(c.end-c.start).toFixed(3)} -map 0:v:0 -map 0:a:0 -vf fps=25 -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac /work/compact/scene-${i}.mp4`);
+commands.push('ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i /work/compact/segments.txt -i /work/onboarding-short.srt -map 0:v:0 -map 0:a:0 -map 1:s:0 -c copy -c:s mov_text -metadata:s:s:0 language=eng -movflags +faststart /work/onboarding-short.mp4');
+writeFileSync('artifacts/compact/render.sh','#!/bin/sh\nset -eu\n'+commands.join('\n')+'\n');
+console.log(`Shortening ${script.duration_seconds}s to approximately ${outputTime.toFixed(1)}s; preserving all narration and actions.`);
+const result=spawnSync('docker',['run','--rm','--entrypoint','sh','-v',dir+'/artifacts:/work','jrottenberg/ffmpeg:7.1-ubuntu','/work/compact/render.sh'],{stdio:'inherit',windowsHide:true});
+if(result.status!==0)throw Error('Short video rendering failed');
