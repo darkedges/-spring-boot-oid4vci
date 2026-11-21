@@ -1,0 +1,26 @@
+# Profile "postgres": keep tenants, their keys and the issuer's state (codes, nonces, offers, token claims, proofing sessions) in
+# PostgreSQL, shared by every instance and kept across restarts. Usually with "tenancy".
+#
+#   ISSUER_DATABASE_URL            jdbc:postgresql://host:5432/issuer
+#   ISSUER_DATABASE_USERNAME       (default issuer)
+#   ISSUER_DATABASE_PASSWORD
+#   TENANT_KEY_ENCRYPTION_KEY      base64 of 32 random bytes: encrypts tenants' private keys. Back it up: losing it loses them.
+#   ISSUER_STORE_ENCRYPTION_KEY    base64 of 32 random bytes: encrypts the issuer's state, which holds identity claims.
+spring:
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: ${ISSUER_DATABASE_URL}
+    username: ${ISSUER_DATABASE_USERNAME:issuer}
+    password: ${ISSUER_DATABASE_PASSWORD}
+oid4vc:
+  tenancy:
+    store:
+      type: jdbc
+    keys:
+      encryption-key: ${TENANT_KEY_ENCRYPTION_KEY}
+oid4vci:
+  issuer:
+    store:
+      type: jdbc
+      encryption-key: ${ISSUER_STORE_ENCRYPTION_KEY}

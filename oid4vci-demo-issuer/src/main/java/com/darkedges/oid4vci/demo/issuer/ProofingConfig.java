@@ -1,10 +1,16 @@
 package com.darkedges.oid4vci.demo.issuer;
 
+import com.darkedges.oid4vc.tenancy.TenantRepository;
+import com.darkedges.oid4vci.issuer.IssuerContext;
+import com.darkedges.oid4vci.issuer.jdbc.IssuerEntryTable;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Clock;
+import java.util.Optional;
 
 /**
  * Wiring for the identity-proofing flow.
@@ -23,9 +29,33 @@ public class ProofingConfig {
         return Clock.systemUTC();
     }
 
+    /** In the issuer's PostgreSQL table when it has one (oid4vci.issuer.store.type=jdbc), in memory otherwise. */
     @Bean
-    public ProofingSessionStore proofingSessionStore() {
-        return new InMemoryProofingSessionStore();
+    public ProofingSessionStore proofingSessionStore(ObjectProvider<IssuerEntryTable> table) {
+        IssuerEntryTable shared = table.getIfAvailable();
+        return shared != null ? new JdbcProofingSessionStore(shared) : new InMemoryProofingSessionStore();
+    }
+
+    /** Each tenant's {@code settings.proofing}; none for a single-tenant issuer. */
+    @Bean
+    public TenantProofingSettings tenantProofingSettings(ObjectProvider<TenantRepository> tenants) {
+        return new TenantProofingSettings() {
+            private Optional<JsonNode> settings(IssuerContext context) {
+                TenantRepository repository = tenants.getIfAvailable();
+                if (repository == null) return Optional.empty();
+                return repository.findById(context.tenantId()).map(t -> t.settings().path("proofing")).filter(JsonNode::isObject);
+            }
+
+            @Override
+            public boolean enabled(IssuerContext context) {
+                return settings(context).map(p -> p.path("enabled").asBoolean(true)).orElse(true);
+            }
+
+            @Override
+            public Optional<String> credentialConfigurationId(IssuerContext context) {
+                return settings(context).map(p -> p.path("credentialConfigurationId").asText("")).filter(id -> !id.isBlank());
+            }
+        };
     }
 
     @Bean

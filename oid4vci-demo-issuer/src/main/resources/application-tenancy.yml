@@ -1,0 +1,31 @@
+# Profile "tenancy": one issuer for many tenants, each an AuthStack environment (see oid4vp's docs/multi-tenancy.md and the
+# "Multi-tenant issuers" section of README.md). A tenant is served on <slug>.<platform host>, on a custom domain AuthStack has
+# verified for it, or on <platform origin>/t/<slug>.
+#
+# The default tenant ("zkp") is the issuer as it was: on the platform origins themselves, signing with this application's keys
+# (DemoIssuerKeyConfig), so wallets and verifiers that trust them keep working. Every other tenant has its own keys.
+#
+# Settings left to the environment (relaxed binding), so nothing here is a secret:
+#   OID4VC_TENANCY_AUTHSTACK_API_URL         AuthStack, for console sign-in to the admin API and for verified custom domains
+#   OID4VC_TENANCY_AUTHSTACK_TOKEN_URL       the platform worker's token endpoint   } custom domains;
+#   OID4VC_TENANCY_AUTHSTACK_CLIENT_ID       the platform worker                    } without them, platform
+#   OID4VC_TENANCY_AUTHSTACK_CLIENT_SECRET                                          } subdomains and paths only
+#   OID4VC_TENANCY_ADMIN_ENABLED=true        with the API URL, lets the AuthStack console manage tenants
+#   OID4VC_TENANCY_ADMIN_ALLOWED_ORIGINS     the console's origin
+#   OID4VC_TENANCY_KEYS_CA_KEYSTORE / _CA_KEYSTORE_PASSWORD / _CA_ALIAS   the CA certifying tenant keys (self-signed without)
+# Add the "postgres" profile to keep tenants, keys and issuer state in PostgreSQL; without it they are in memory.
+oid4vc:
+  tenancy:
+    enabled: true
+    service: issuer
+    platform-origins: ${ISSUER_PLATFORM_ORIGINS:https://issuer.zkp.au,http://localhost:8092,http://issuer:8092}
+    # Served without a tenant on any host. /proofing/result is the proofing service's one callback for every tenant: the session
+    # it names says which tenant it is for.
+    platform-paths: [/admin/api/**, /actuator/**, /error, /proofing/result]
+    default-tenant:
+      id: ${ISSUER_DEFAULT_TENANT_ID:zkp}
+      slug: ${ISSUER_DEFAULT_TENANT_SLUG:zkp}
+    store:
+      type: memory
+    admin:
+      enabled: false

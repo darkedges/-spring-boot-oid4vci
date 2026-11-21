@@ -142,4 +142,24 @@ class Oid4vciIssuerTenancyAutoConfigurationTest {
                     .anySatisfy(p -> assertThat(p).contains("public key only"));
         });
     }
+
+    @Test
+    void theDefaultTenantKeepsTheApplicationsKeysAndOthersGetTheirOwn() {
+        runner.withPropertyValues("oid4vc.tenancy.default-tenant.id=zkp")
+                .withBean(com.nimbusds.jose.jwk.ECKey.class, () -> {
+                    try { return new ECKeyGenerator(Curve.P_256).keyID("application-key").generate(); } catch (Exception e) { throw new IllegalStateException(e); }
+                })
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    TenantRepository tenants = context.getBean(TenantRepository.class);
+                    Tenant zkp = tenants.findById("zkp").orElseThrow();
+                    Tenant bank = tenants.save(Tenant.create("env-bank", "org-1", "bank"));
+                    IssuerKeys keys = context.getBean(IssuerKeys.class);
+                    assertThat(keys.signingKey(at(zkp)).getKeyID()).isEqualTo("application-key");
+                    assertThat(keys.verificationKeys(at(zkp))).extracting(k -> k.getKeyID()).containsExactly("application-key");
+                    assertThat(keys.signingKey(at(bank)).getKeyID()).isNotEqualTo("application-key");
+                    // No application mdoc key: the default tenant's mdocs use a key of its own.
+                    assertThat(keys.mdocKey(at(zkp))).isPresent();
+                });
+    }
 }

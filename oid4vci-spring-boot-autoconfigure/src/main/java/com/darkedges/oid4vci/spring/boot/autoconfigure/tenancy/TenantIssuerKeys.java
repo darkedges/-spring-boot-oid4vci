@@ -25,22 +25,42 @@ public final class TenantIssuerKeys implements IssuerKeys {
 
     private final TenantRepository tenants;
     private final TenantKeyService keys;
+    /** The deployment's default tenant, which keeps signing with the application's own keys; {@code null} if none. */
+    private final String applicationKeysTenant;
+    private final IssuerKeys applicationKeys;
 
     public TenantIssuerKeys(TenantRepository tenants, TenantKeyService keys) {
+        this(tenants, keys, null, null);
+    }
+
+    /**
+     * @param applicationKeysTenant a tenant (the deployment's default tenant) that keeps the application's own keys, so the
+     *                              issuer that was single-tenant keeps the keys wallets and verifiers already trust
+     * @param applicationKeys       those keys: its mdoc key, if absent, is the tenant's own
+     */
+    public TenantIssuerKeys(TenantRepository tenants, TenantKeyService keys, String applicationKeysTenant, IssuerKeys applicationKeys) {
         if (!keys.purposes().contains(SIGNING)) {
             throw new IllegalStateException("oid4vc.tenancy.keys.purposes must include \"" + SIGNING + "\" for an issuer");
         }
         this.tenants = tenants;
         this.keys = keys;
+        this.applicationKeysTenant = applicationKeys == null ? null : applicationKeysTenant;
+        this.applicationKeys = applicationKeys;
+    }
+
+    private boolean usesApplicationKeys(IssuerContext context) {
+        return applicationKeysTenant != null && applicationKeysTenant.equals(context.tenantId());
     }
 
     @Override
     public ECKey signingKey(IssuerContext context) {
+        if (usesApplicationKeys(context)) return applicationKeys.signingKey(context);
         return keys.activeKey(tenant(context), SIGNING).key();
     }
 
     @Override
     public List<ECKey> verificationKeys(IssuerContext context) {
+        if (usesApplicationKeys(context)) return applicationKeys.verificationKeys(context);
         Tenant tenant = tenant(context);
         List<TenantKey> published = keys.publishedKeys(tenant, SIGNING);
         if (published.isEmpty()) published = List.of(keys.activeKey(tenant, SIGNING));
@@ -49,6 +69,10 @@ public final class TenantIssuerKeys implements IssuerKeys {
 
     @Override
     public Optional<MdocSigningKey> mdocKey(IssuerContext context) {
+        if (usesApplicationKeys(context)) {
+            Optional<MdocSigningKey> own = applicationKeys.mdocKey(context);
+            if (own.isPresent()) return own;
+        }
         if (!keys.purposes().contains(MDOC)) return Optional.empty();
         TenantKey key = keys.activeKey(tenant(context), MDOC);
         try {

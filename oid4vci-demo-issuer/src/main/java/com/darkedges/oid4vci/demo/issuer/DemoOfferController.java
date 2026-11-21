@@ -1,5 +1,9 @@
 package com.darkedges.oid4vci.demo.issuer;
 
+import com.darkedges.oid4vci.issuer.web.IssuerContextResolver;
+import com.darkedges.oid4vci.issuer.PreAuthorizedCodeService;
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadata;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
 import com.darkedges.oid4vci.core.offer.CredentialOffer;
@@ -36,21 +40,24 @@ public class DemoOfferController {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final PreAuthorizedCodeStore codeStore;
-    private final CredentialIssuerMetadataTemplate template;
+    private final PreAuthorizedCodeService codes;
+    private final IssuerMetadataTemplates templates;
+    private final IssuerContextResolver issuers;
 
-    public DemoOfferController(PreAuthorizedCodeStore codeStore, CredentialIssuerMetadataTemplate template) {
-        this.codeStore = codeStore;
-        this.template = template;
+    public DemoOfferController(PreAuthorizedCodeService codes, IssuerMetadataTemplates templates, IssuerContextResolver issuers) {
+        this.codes = codes;
+        this.templates = templates;
+        this.issuers = issuers;
     }
 
     @GetMapping(value = "/demo/offer", produces = MediaType.APPLICATION_JSON_VALUE)
     public String offer(HttpServletRequest servletRequest) {
-        CredentialIssuerMetadata metadata = template.resolve(RequestBaseUrl.resolve(servletRequest));
+        IssuerContext context = issuers.resolve(servletRequest);
+        CredentialIssuerMetadata metadata = templates.credentialIssuer(context).resolve(context.issuerIdentifier());
         List<String> configurationIds = metadata.credentialConfigurationsSupported().keySet().stream().filter(id -> !"PassportCredential".equals(id)).toList();
         String code = randomCode();
 
-        codeStore.save(code, new PreAuthorizedCodeSession(
+        codes.offer(context, code, new PreAuthorizedCodeSession(
                 configurationIds, Optional.empty(),
                 Map.of("given_name", "Jane", "family_name", "Doe"),
                 Instant.now().plus(Duration.ofMinutes(10))));
