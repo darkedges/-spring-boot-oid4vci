@@ -45,6 +45,7 @@
     <module>oid4vci-wallet-core</module>
     <module>oid4vci-issuer-web</module>
     <module>oid4vci-spring-boot-autoconfigure</module>
+    <module>oid4vci-issuer-jdbc</module>
     <module>oid4vci-demo-issuer</module>
     <module>oid4vci-demo-wallet</module>
   </modules>
@@ -128,6 +129,11 @@
       <dependency>
         <groupId>com.darkedges.oid4vci</groupId>
         <artifactId>oid4vci-issuer-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vci</groupId>
+        <artifactId>oid4vci-issuer-jdbc</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

@@ -267,6 +267,17 @@ A path tenant's metadata is at the inserted well-known URL, such as `/.well-know
   - a setting a tenant leaves out falls back to the deployment's `oid4vci.issuer.*` value;
   - the console's admin API refuses settings that wouldn't work.
 
+**Persistent stores (`oid4vci-issuer-jdbc`).** Add the module and set `oid4vci.issuer.store.type=jdbc`. The issuer then keeps what it
+holds between requests in PostgreSQL, through the application's `DataSource`, instead of in memory: codes, PAR requests, nonces,
+offers, the claims behind access tokens, and DPoP and attestation replay records. Several instances share it, and it survives a restart.
+- **One table**, `oid4vci_issuer_entry`, created at start-up.
+- **Keys are stored only as SHA-256 hashes,** because a code or a nonce is a bearer secret.
+- **Payloads, which can be someone's identity details, are encrypted with AES-256-GCM** under `oid4vci.issuer.store.encryption-key`
+  (`ISSUER_STORE_ENCRYPTION_KEY`, base64 of 32 random bytes; required). Each is bound to its row.
+- **Single-use entries are read and removed in one statement,** so a code is redeemed once even when instances race for it.
+- **Expired entries are swept** as new ones are added.
+- **`oid4vci.issuer.store.offer-ttl`** (default 24 hours) bounds how long an offer by reference is kept.
+
 **SPI changes.**
 - `CredentialIssuanceService` and `AuthorizationClaimsResolver` gained context-aware default methods. Existing single-tenant
   implementations, such as the bank's, compile and behave unchanged.
