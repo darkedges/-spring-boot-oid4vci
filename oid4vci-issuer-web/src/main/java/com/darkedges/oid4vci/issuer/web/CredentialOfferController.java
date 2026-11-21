@@ -23,14 +23,20 @@ import org.springframework.web.server.ResponseStatusException;
 public class CredentialOfferController {
 
     private final CredentialOfferStore store;
+    private final IssuerContextResolver issuers;
 
     public CredentialOfferController(CredentialOfferStore store) {
+        this(store, IssuerContextResolver.SINGLE_TENANT);
+    }
+
+    public CredentialOfferController(CredentialOfferStore store, IssuerContextResolver issuers) {
         this.store = store;
+        this.issuers = issuers;
     }
 
     @GetMapping(value = "/credential-offer/{offerId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<String> offer(@PathVariable String offerId) {
-        CredentialOffer offer = store.find(offerId)
+    public ResponseEntity<String> offer(@PathVariable String offerId, jakarta.servlet.http.HttpServletRequest request) {
+        CredentialOffer offer = issuers.resolve(request).scopeIfValid(offerId).flatMap(store::find)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown credential offer"));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(CredentialOfferWriter.write(offer).toString());
     }

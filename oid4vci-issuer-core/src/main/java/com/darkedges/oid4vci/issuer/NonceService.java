@@ -25,15 +25,26 @@ public final class NonceService {
     }
 
     public String issue() {
+        return issue(IssuerContext.single(""));
+    }
+
+    /** A fresh nonce, valid only at this tenant. */
+    public String issue(IssuerContext context) {
         String nonce = randomUrlSafeToken();
-        store.save(nonce, clock.instant().plus(ttl));
+        store.save(context.scope(nonce), clock.instant().plus(ttl));
         return nonce;
     }
 
     /** @throws Oid4vciException with {@link Oid4vciErrorCode#INVALID_NONCE} if the nonce is unknown,
      * already consumed, or expired. */
     public void requireValid(String nonce) {
-        if (!store.consume(nonce, clock.instant())) {
+        requireValid(IssuerContext.single(""), nonce);
+    }
+
+    /** Consumes a nonce this tenant issued; one issued by another tenant is unknown here. */
+    public void requireValid(IssuerContext context, String nonce) {
+        String key = context.scopeIfValid(nonce).orElse(null);
+        if (key == null || !store.consume(key, clock.instant())) {
             throw new Oid4vciException(Oid4vciErrorCode.INVALID_NONCE, "unknown, already-used, or expired c_nonce");
         }
     }

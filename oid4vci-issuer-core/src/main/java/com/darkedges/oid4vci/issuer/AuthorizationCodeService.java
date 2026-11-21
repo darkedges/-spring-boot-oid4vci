@@ -23,7 +23,12 @@ public final class AuthorizationCodeService {
     }
 
     public PreAuthorizedCodeSession redeem(AuthorizationCodeTokenRequest request) {
-        AuthorizationCodeEntry entry = store.consume(request.code())
+        return redeem(IssuerContext.single(""), request);
+    }
+
+    /** Redeems an authorization code this tenant issued; one issued by another tenant is unknown here. */
+    public PreAuthorizedCodeSession redeem(IssuerContext context, AuthorizationCodeTokenRequest request) {
+        AuthorizationCodeEntry entry = context.scopeIfValid(request.code()).flatMap(store::consume)
                 .orElseThrow(() -> new Oid4vciException(
                         Oid4vciErrorCode.INVALID_GRANT, "unknown or already-redeemed authorization code"));
 

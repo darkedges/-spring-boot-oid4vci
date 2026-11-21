@@ -1,5 +1,7 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataWriter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,18 +40,24 @@ import java.time.Duration;
 @RestController
 public class IssuerMetadataController {
 
-    private final CredentialIssuerMetadataTemplate template;
+    private final IssuerMetadataTemplates templates;
+    private final IssuerContextResolver issuers;
 
     public IssuerMetadataController(CredentialIssuerMetadataTemplate template) {
-        this.template = template;
+        this(IssuerMetadataTemplates.fixed(template, null), IssuerContextResolver.SINGLE_TENANT);
+    }
+
+    public IssuerMetadataController(IssuerMetadataTemplates templates, IssuerContextResolver issuers) {
+        this.templates = templates;
+        this.issuers = issuers;
     }
 
     @GetMapping("/.well-known/openid-credential-issuer")
     public ResponseEntity<String> metadata(HttpServletRequest request) {
-        String baseUrl = RequestBaseUrl.resolve(request);
+        IssuerContext context = issuers.resolve(request);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_JSON)
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)))
-                .body(CredentialIssuerMetadataWriter.write(template.resolve(baseUrl)).toString());
+                .body(CredentialIssuerMetadataWriter.write(templates.credentialIssuer(context).resolve(context.issuerIdentifier())).toString());
     }
 }

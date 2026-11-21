@@ -37,6 +37,11 @@ public final class ProofOfPossessionValidator {
     }
 
     public ECKey verify(String proofJwt, String expectedAudience) {
+        return verify(IssuerContext.single(expectedAudience), proofJwt, expectedAudience);
+    }
+
+    /** As {@link #verify(String, String)}, with the proof's {@code nonce} checked against this tenant's nonces. */
+    public ECKey verify(IssuerContext context, String proofJwt, String expectedAudience) {
         SignedJWT jwt;
         try {
             jwt = SignedJWT.parse(proofJwt);
@@ -83,7 +88,7 @@ public final class ProofOfPossessionValidator {
         if (nonce == null) {
             throw new Oid4vciException(Oid4vciErrorCode.INVALID_PROOF, "proof JWT is missing required \"nonce\" claim");
         }
-        nonceService.requireValid(nonce);
+        nonceService.requireValid(context, nonce);
 
         if (claims.getIssueTime() == null) {
             throw new Oid4vciException(Oid4vciErrorCode.INVALID_PROOF, "proof JWT is missing required \"iat\" claim");

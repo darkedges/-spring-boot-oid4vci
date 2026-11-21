@@ -1,1 +1,2 @@
 com.darkedges.oid4vci.spring.boot.autoconfigure.Oid4vciIssuerAutoConfiguration
+com.darkedges.oid4vci.spring.boot.autoconfigure.tenancy.Oid4vciIssuerTenancyAutoConfiguration

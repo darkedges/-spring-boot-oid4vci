@@ -37,7 +37,7 @@ import java.util.Optional;
  */
 public final class ClientAttestationValidator {
 
-    private final ClientAttestationTrustAnchor trustAnchor;
+    private final ClientAttestationTrustAnchors trustAnchors;
     private final DpopReplayStore popReplayStore;
     private final Clock clock;
     private final Duration allowedClockSkew;
@@ -54,7 +54,14 @@ public final class ClientAttestationValidator {
     public ClientAttestationValidator(
             ClientAttestationTrustAnchor trustAnchor, DpopReplayStore popReplayStore, Clock clock, Duration allowedClockSkew,
             Optional<AttestationChallengeService> challengeService) {
-        this.trustAnchor = trustAnchor;
+        this(ClientAttestationTrustAnchors.fixed(trustAnchor), popReplayStore, clock, allowedClockSkew, challengeService);
+    }
+
+    /** Trusts, for each tenant, the Wallet Provider that tenant names (none: the tenant refuses client attestation). */
+    public ClientAttestationValidator(
+            ClientAttestationTrustAnchors trustAnchors, DpopReplayStore popReplayStore, Clock clock, Duration allowedClockSkew,
+            Optional<AttestationChallengeService> challengeService) {
+        this.trustAnchors = trustAnchors;
         this.popReplayStore = popReplayStore;
         this.clock = clock;
         this.allowedClockSkew = allowedClockSkew;
@@ -68,6 +75,14 @@ public final class ClientAttestationValidator {
      * @return the authenticated client id (the Client Attestation JWT's {@code sub}).
      */
     public String verifyForTokenRequest(String attestationJwt, String popJwt, String issuerIdentifier) {
+        return verifyForTokenRequest(IssuerContext.single(issuerIdentifier), attestationJwt, popJwt);
+    }
+
+    /** As {@link #verifyForTokenRequest(String, String, String)}, against this tenant's trusted Wallet Provider. */
+    public String verifyForTokenRequest(IssuerContext context, String attestationJwt, String popJwt) {
+        String issuerIdentifier = context.issuerIdentifier();
+        ClientAttestationTrustAnchor trustAnchor = trustAnchors.forContext(context)
+                .orElseThrow(() -> new Oid4vciException(Oid4vciErrorCode.INVALID_CLIENT, "attest_jwt_client_auth is not supported by this issuer"));
         SignedJWT attestation = parse(attestationJwt, "Client Attestation");
         requireType(attestation, ClientAttestation.ATTESTATION_TYP, "Client Attestation");
         verifySignature(attestation, trustAnchor.trustedIssuerKey(), "Client Attestation");

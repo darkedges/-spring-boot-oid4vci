@@ -1,5 +1,14 @@
 package com.darkedges.oid4vci.spring.boot.autoconfigure;
 
+import org.springframework.context.annotation.Conditional;
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
+import org.springframework.context.annotation.Configuration;
+import com.darkedges.oid4vci.issuer.web.IssuerAccessTokenDecoder;
+import com.darkedges.oid4vci.issuer.web.IssuerContextResolver;
+import com.darkedges.oid4vci.issuer.CredentialIssuanceServiceResolver;
+import com.darkedges.oid4vci.issuer.ClientAttestationTrustAnchors;
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerKeys;
 import com.darkedges.oid4vci.core.clientattestation.ClientAttestation;
 import com.darkedges.oid4vci.core.metadata.AuthorizationServerMetadataTemplate;
 import com.darkedges.oid4vci.core.metadata.BatchCredentialIssuance;
@@ -97,15 +106,46 @@ public class Oid4vciIssuerAutoConfiguration {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /**
+     * A single-tenant issuer's keys: the application's {@link ECKey} (and {@link MdocIssuerKeyMaterial}, if any). A multi-tenant
+     * deployment supplies per-tenant {@link IssuerKeys} instead (see {@code Oid4vciIssuerTenancyAutoConfiguration}), which backs
+     * this off. Nested so it is registered before the beans below that are conditional on {@link IssuerKeys}.
+     */
+    @Configuration(proxyBeanMethods = false)
+    static class SingleTenantIssuerKeys {
+
+        @Bean
+        @ConditionalOnMissingBean(IssuerKeys.class)
+        @ConditionalOnBean(ECKey.class)
+        IssuerKeys issuerKeys(ECKey issuerSigningKey, ObjectProvider<MdocIssuerKeyMaterial> mdoc) {
+            MdocIssuerKeyMaterial material = mdoc.getIfAvailable();
+            return IssuerKeys.fixed(issuerSigningKey, material == null ? null
+                    : new IssuerKeys.MdocSigningKey(material.privateKey(), material.certificateChain()));
+        }
+
+        /** The one tenant, on the URL each request arrived on. */
+        @Bean
+        @ConditionalOnMissingBean
+        IssuerContextResolver issuerContextResolver() {
+            return IssuerContextResolver.SINGLE_TENANT;
+        }
+    }
+
     @Bean
     @ConditionalOnMissingBean
     public CredentialIssuerMetadataTemplate credentialIssuerMetadataTemplate(Oid4vciIssuerProperties properties) {
         JsonNode configurations = parseJson(properties.getCredentialConfigurationsSupported(),
                 "oid4vci.issuer.credential-configurations-supported");
+        return credentialIssuerMetadataTemplate(configurations, properties.getBatchCredentialIssuanceMaxSize(), properties);
+    }
+
+    /** A Credential Issuer Metadata document offering these credential configurations (a JSON object), at the configured paths. */
+    public static CredentialIssuerMetadataTemplate credentialIssuerMetadataTemplate(
+            JsonNode configurations, Integer batchCredentialIssuanceMaxSize, Oid4vciIssuerProperties properties) {
         ObjectNode root = MAPPER.createObjectNode();
         root.set("credential_configurations_supported", configurations);
-        Optional<BatchCredentialIssuance> batchCredentialIssuance = properties.getBatchCredentialIssuanceMaxSize() == null
-                ? Optional.empty() : Optional.of(new BatchCredentialIssuance(properties.getBatchCredentialIssuanceMaxSize()));
+        Optional<BatchCredentialIssuance> batchCredentialIssuance = batchCredentialIssuanceMaxSize == null
+                ? Optional.empty() : Optional.of(new BatchCredentialIssuance(batchCredentialIssuanceMaxSize));
         return new CredentialIssuerMetadataTemplate(
                 properties.getCredentialEndpointPath(), Optional.of(properties.getNonceEndpointPath()),
                 CredentialIssuerMetadataReader.readConfigurationsSupported(root), batchCredentialIssuance);
@@ -188,9 +228,9 @@ public class Oid4vciIssuerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(ECKey.class)
-    public AccessTokenService accessTokenService(ECKey issuerSigningKey, Oid4vciIssuerProperties properties) {
-        return new AccessTokenService(issuerSigningKey, properties.getAccessTokenTtl(), Clock.systemUTC());
+    @ConditionalOnBean(IssuerKeys.class)
+    public AccessTokenService accessTokenService(IssuerKeys issuerKeys, Oid4vciIssuerProperties properties) {
+        return new AccessTokenService(issuerKeys, properties.getAccessTokenTtl(), Clock.systemUTC());
     }
 
     /**
@@ -208,23 +248,18 @@ public class Oid4vciIssuerAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(ECKey.class)
-    public JwtDecoder jwtDecoder(ECKey issuerSigningKey) {
-        JWKSource<SecurityContext> jwkSource = new ImmutableJWKSet<>(new JWKSet(issuerSigningKey.toPublicJWK()));
-        return NimbusJwtDecoder.withJwkSource(jwkSource)
-                .jwsAlgorithm(org.springframework.security.oauth2.jose.jws.SignatureAlgorithm.ES256)
-                .build();
+    @ConditionalOnBean(IssuerKeys.class)
+    public JwtDecoder jwtDecoder(IssuerKeys issuerKeys, IssuerContextResolver issuers) {
+        // Also checks iss and aud against the request's issuer (see IssuerAccessTokenDecoder). A multi-tenant deployment refuses a
+        // token it can't place; a single-tenant one checks signature and expiry alone outside a request, as before.
+        return new IssuerAccessTokenDecoder(issuerKeys, issuers, issuers != IssuerContextResolver.SINGLE_TENANT);
     }
 
     @Bean(name = "sdJwtVcCredentialIssuanceService")
     @ConditionalOnMissingBean(name = "sdJwtVcCredentialIssuanceService")
-    @ConditionalOnBean(ECKey.class)
-    public CredentialIssuanceService sdJwtVcCredentialIssuanceService(ECKey issuerSigningKey, Oid4vciIssuerProperties properties) {
-        List<String> certificateChain = issuerSigningKey.getX509CertChain() == null
-                ? List.of()
-                : issuerSigningKey.getX509CertChain().stream().map(Object::toString).toList();
-        return new SdJwtVcCredentialIssuanceService(
-                issuerSigningKey, certificateChain, properties.getCredentialValidity(), Clock.systemUTC());
+    @ConditionalOnBean(IssuerKeys.class)
+    public CredentialIssuanceService sdJwtVcCredentialIssuanceService(IssuerKeys issuerKeys, Oid4vciIssuerProperties properties) {
+        return new SdJwtVcCredentialIssuanceService(issuerKeys, properties.getCredentialValidity(), Clock.systemUTC());
     }
 
     @Bean(name = "mdocCredentialIssuanceService")
@@ -244,6 +279,21 @@ public class Oid4vciIssuerAutoConfiguration {
         return Map.copyOf(byFormat);
     }
 
+    @Bean
+    @ConditionalOnMissingBean
+    public CredentialIssuanceServiceResolver credentialIssuanceServiceResolver(
+            Map<CredentialFormat, CredentialIssuanceService> credentialIssuanceServices) {
+        return CredentialIssuanceServiceResolver.of(credentialIssuanceServices);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public IssuerMetadataTemplates issuerMetadataTemplates(
+            CredentialIssuerMetadataTemplate credentialIssuerMetadataTemplate,
+            ObjectProvider<AuthorizationServerMetadataTemplate> authorizationServerMetadataTemplate) {
+        return IssuerMetadataTemplates.fixed(credentialIssuerMetadataTemplate, authorizationServerMetadataTemplate.getIfAvailable());
+    }
+
     /**
      * {@code @RestControllerAdvice} beans are only ever discovered by component scanning, but this one
      * lives in {@code oid4vci-issuer-web}'s package, not the consuming app's — same reason every
@@ -257,83 +307,83 @@ public class Oid4vciIssuerAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public Oid4vciExceptionHandler oid4vciExceptionHandler(NonceService nonceService) {
-        return new Oid4vciExceptionHandler(nonceService);
+    public Oid4vciExceptionHandler oid4vciExceptionHandler(NonceService nonceService, IssuerContextResolver issuers) {
+        return new Oid4vciExceptionHandler(nonceService, issuers);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public IssuerMetadataController issuerMetadataController(CredentialIssuerMetadataTemplate template) {
-        return new IssuerMetadataController(template);
+    public IssuerMetadataController issuerMetadataController(IssuerMetadataTemplates templates, IssuerContextResolver issuers) {
+        return new IssuerMetadataController(templates, issuers);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public SdJwtVcTypeMetadataController sdJwtVcTypeMetadataController(CredentialIssuerMetadataTemplate template) {
-        return new SdJwtVcTypeMetadataController(template);
+    public SdJwtVcTypeMetadataController sdJwtVcTypeMetadataController(IssuerMetadataTemplates templates, IssuerContextResolver issuers) {
+        return new SdJwtVcTypeMetadataController(templates, issuers);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public CredentialOfferController credentialOfferController(CredentialOfferStore store) {
-        return new CredentialOfferController(store);
+    public CredentialOfferController credentialOfferController(CredentialOfferStore store, IssuerContextResolver issuers) {
+        return new CredentialOfferController(store, issuers);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public NonceController nonceController(NonceService nonceService) {
-        return new NonceController(nonceService);
+    public NonceController nonceController(NonceService nonceService, IssuerContextResolver issuers) {
+        return new NonceController(nonceService, issuers);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(ECKey.class)
+    @ConditionalOnBean(IssuerKeys.class)
     public TokenController tokenController(
             PreAuthorizedCodeService preAuthorizedCodeService, AccessTokenService accessTokenService,
             IssuedAccessTokenClaimsStore claimsStore, DpopProofValidator dpopProofValidator,
             ObjectProvider<ClientAttestationValidator> clientAttestationValidator,
-            ObjectProvider<AuthorizationCodeService> authorizationCodeService) {
+            ObjectProvider<AuthorizationCodeService> authorizationCodeService, IssuerContextResolver issuers) {
         return new TokenController(
                 preAuthorizedCodeService, accessTokenService, claimsStore, dpopProofValidator,
                 Optional.ofNullable(clientAttestationValidator.getIfAvailable()),
-                Optional.ofNullable(authorizationCodeService.getIfAvailable()));
+                Optional.ofNullable(authorizationCodeService.getIfAvailable()), issuers);
     }
 
     /** Only registered once the consuming app supplies an {@link AuthorizationClaimsResolver} bean — see
      * that interface's Javadoc. */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean({ECKey.class, AuthorizationClaimsResolver.class})
+    @ConditionalOnBean({IssuerKeys.class, AuthorizationClaimsResolver.class})
     public AuthorizationEndpointController authorizationEndpointController(
             AuthorizationCodeStore authorizationCodeStore, PushedAuthorizationRequestStore pushedAuthorizationRequestStore,
-            CredentialIssuerMetadataTemplate template, AuthorizationClaimsResolver claimsResolver) {
+            IssuerMetadataTemplates templates, AuthorizationClaimsResolver claimsResolver, IssuerContextResolver issuers) {
         return new AuthorizationEndpointController(
-                authorizationCodeStore, pushedAuthorizationRequestStore, template, claimsResolver);
+                authorizationCodeStore, pushedAuthorizationRequestStore, templates, claimsResolver, issuers);
     }
 
     /** Only registered once the consuming app supplies an {@link AuthorizationClaimsResolver} bean — a PAR
      * endpoint with no Authorization Endpoint able to redeem its {@code request_uri} would be pointless. */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean({ECKey.class, AuthorizationClaimsResolver.class})
+    @ConditionalOnBean({IssuerKeys.class, AuthorizationClaimsResolver.class})
     public PushedAuthorizationRequestController pushedAuthorizationRequestController(
-            PushedAuthorizationRequestStore pushedAuthorizationRequestStore) {
-        return new PushedAuthorizationRequestController(pushedAuthorizationRequestStore);
+            PushedAuthorizationRequestStore pushedAuthorizationRequestStore, IssuerContextResolver issuers) {
+        return new PushedAuthorizationRequestController(pushedAuthorizationRequestStore, issuers);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public CredentialController credentialController(
-            CredentialIssuerMetadataTemplate template, ProofOfPossessionValidator proofValidator, IssuedAccessTokenClaimsStore claimsStore,
-            Map<CredentialFormat, CredentialIssuanceService> issuanceServices) {
-        return new CredentialController(template, proofValidator, claimsStore, issuanceServices);
+            IssuerMetadataTemplates templates, ProofOfPossessionValidator proofValidator, IssuedAccessTokenClaimsStore claimsStore,
+            CredentialIssuanceServiceResolver issuanceServices, IssuerContextResolver issuers) {
+        return new CredentialController(templates, proofValidator, claimsStore, issuanceServices, issuers, Clock.systemUTC());
     }
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(ECKey.class)
-    public JwksController jwksController(ECKey issuerSigningKey) {
-        return new JwksController(issuerSigningKey);
+    @ConditionalOnBean(IssuerKeys.class)
+    public JwksController jwksController(IssuerKeys issuerKeys, IssuerContextResolver issuers) {
+        return new JwksController(issuerKeys, issuers);
     }
 
     /** A separate {@link DpopReplayStore} instance from {@link #dpopReplayStore} — same generic
@@ -387,13 +437,29 @@ public class Oid4vciIssuerAutoConfiguration {
      * the issuer signing {@link ECKey} above. */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(ClientAttestationTrustAnchor.class)
+    @Conditional(OnClientAttestationTrust.class)
     public ClientAttestationValidator clientAttestationValidator(
-            ClientAttestationTrustAnchor trustAnchor, DpopReplayStore clientAttestationPopReplayStore,
+            ObjectProvider<ClientAttestationTrustAnchors> trustAnchors, ObjectProvider<ClientAttestationTrustAnchor> trustAnchor,
+            DpopReplayStore clientAttestationPopReplayStore,
             Oid4vciIssuerProperties properties, ObjectProvider<AttestationChallengeService> attestationChallengeService) {
+        // Per tenant when a multi-tenant configuration supplies the anchors; otherwise the one Wallet Provider for every request.
+        ClientAttestationTrustAnchors anchors = trustAnchors.getIfAvailable(() -> ClientAttestationTrustAnchors.fixed(trustAnchor.getObject()));
         return new ClientAttestationValidator(
-                trustAnchor, clientAttestationPopReplayStore, Clock.systemUTC(), properties.getAttestationPopFreshness(),
+                anchors, clientAttestationPopReplayStore, Clock.systemUTC(), properties.getAttestationPopFreshness(),
                 Optional.ofNullable(attestationChallengeService.getIfAvailable()));
+    }
+
+    /** A Wallet Provider is trusted: one for the deployment, or one per tenant. */
+    static class OnClientAttestationTrust extends AnyNestedCondition {
+        OnClientAttestationTrust() {
+            super(ConfigurationPhase.REGISTER_BEAN);
+        }
+
+        @ConditionalOnBean(ClientAttestationTrustAnchor.class)
+        static class OneAnchor {}
+
+        @ConditionalOnBean(ClientAttestationTrustAnchors.class)
+        static class AnchorsPerTenant {}
     }
 
     /**
@@ -407,14 +473,19 @@ public class Oid4vciIssuerAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(ECKey.class)
+    @ConditionalOnBean(IssuerKeys.class)
     public AuthorizationServerMetadataTemplate authorizationServerMetadataTemplate(
             ObjectProvider<ClientAttestationTrustAnchor> clientAttestationTrustAnchor,
             ObjectProvider<AuthorizationClaimsResolver> authorizationClaimsResolver,
             Oid4vciIssuerProperties properties) {
-        boolean attestationSupported = clientAttestationTrustAnchor.getIfAvailable() != null;
-        boolean authorizationCodeSupported = authorizationClaimsResolver.getIfAvailable() != null;
-        Optional<String> challengeEndpointPath = Optional.ofNullable(properties.getAttestationChallengeEndpointPath());
+        return authorizationServerMetadataTemplate(clientAttestationTrustAnchor.getIfAvailable() != null,
+                authorizationClaimsResolver.getIfAvailable() != null,
+                Optional.ofNullable(properties.getAttestationChallengeEndpointPath()));
+    }
+
+    /** The Authorization Server metadata for an issuer that does (or doesn't) accept client attestation and the code flow. */
+    public static AuthorizationServerMetadataTemplate authorizationServerMetadataTemplate(
+            boolean attestationSupported, boolean authorizationCodeSupported, Optional<String> challengeEndpointPath) {
 
         List<String> authMethods = attestationSupported
                 ? List.of("none", ClientAttestation.AUTH_METHOD)
@@ -444,10 +515,10 @@ public class Oid4vciIssuerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(ECKey.class)
+    @ConditionalOnBean(IssuerKeys.class)
     public AuthorizationServerMetadataController authorizationServerMetadataController(
-            AuthorizationServerMetadataTemplate template) {
-        return new AuthorizationServerMetadataController(template);
+            IssuerMetadataTemplates templates, IssuerContextResolver issuers) {
+        return new AuthorizationServerMetadataController(templates, issuers);
     }
 
     private static JsonNode parseJson(String json, String propertyName) {

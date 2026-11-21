@@ -1,5 +1,8 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import com.darkedges.oid4vci.issuer.CredentialIssuanceServiceResolver;
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.credential.CredentialRequest;
 import com.darkedges.oid4vci.core.credential.CredentialRequestReader;
 import com.darkedges.oid4vci.core.credential.CredentialResponse;
@@ -65,10 +68,11 @@ public class CredentialController {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final CredentialIssuerMetadataTemplate template;
+    private final IssuerMetadataTemplates templates;
     private final ProofOfPossessionValidator proofValidator;
     private final IssuedAccessTokenClaimsStore claimsStore;
-    private final Map<CredentialFormat, CredentialIssuanceService> issuanceServices;
+    private final CredentialIssuanceServiceResolver issuanceServices;
+    private final IssuerContextResolver issuers;
     private final Clock clock;
 
     public CredentialController(
@@ -81,18 +85,26 @@ public class CredentialController {
             CredentialIssuerMetadataTemplate template, ProofOfPossessionValidator proofValidator,
             IssuedAccessTokenClaimsStore claimsStore, Map<CredentialFormat, CredentialIssuanceService> issuanceServices,
             Clock clock) {
-        this.template = template;
+        this(IssuerMetadataTemplates.fixed(template, null), proofValidator, claimsStore,
+                CredentialIssuanceServiceResolver.of(issuanceServices), IssuerContextResolver.SINGLE_TENANT, clock);
+    }
+
+    public CredentialController(
+            IssuerMetadataTemplates templates, ProofOfPossessionValidator proofValidator, IssuedAccessTokenClaimsStore claimsStore,
+            CredentialIssuanceServiceResolver issuanceServices, IssuerContextResolver issuers, Clock clock) {
+        this.templates = templates;
         this.proofValidator = proofValidator;
         this.claimsStore = claimsStore;
         this.issuanceServices = issuanceServices;
+        this.issuers = issuers;
         this.clock = clock;
     }
 
-    @PostMapping(value = "/credential", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "${oid4vci.issuer.credential-endpoint-path:/credential}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> credential(
             @AuthenticationPrincipal Jwt accessToken, @RequestBody String rawBody, HttpServletRequest servletRequest) {
-        String baseUrl = RequestBaseUrl.resolve(servletRequest);
-        CredentialIssuerMetadata metadata = template.resolve(baseUrl);
+        IssuerContext context = issuers.resolve(servletRequest);
+        CredentialIssuerMetadata metadata = templates.credentialIssuer(context).resolve(context.issuerIdentifier());
         JsonNode body;
         try {
             body = MAPPER.readTree(rawBody);
@@ -131,10 +143,12 @@ public class CredentialController {
         // one here -- which is right: both mean this token authorizes nothing. The token's own exp is
         // checked by the resource server long before this point; this guards the claims themselves,
         // which for a real issuer are somebody's passport details and should not outlive their use.
-        Map<String, String> claims = claimsStore.find(accessToken.getSubject(), clock.instant())
+        // Scoped to this tenant: a token's subject is only known to the tenant that issued it.
+        Map<String, String> claims = context.scopeIfValid(accessToken.getSubject())
+                .flatMap(subject -> claimsStore.find(subject, clock.instant()))
                 .orElseThrow(() -> new Oid4vciException(Oid4vciErrorCode.INVALID_TOKEN, "no claims on file for this access token"));
 
-        CredentialIssuanceService issuanceService = issuanceServices.get(configuration.format());
+        CredentialIssuanceService issuanceService = issuanceServices.resolve(context, configuration.format()).orElse(null);
         if (issuanceService == null) {
             throw new Oid4vciException(Oid4vciErrorCode.UNSUPPORTED_CREDENTIAL_FORMAT,
                     "no issuance service registered for format: " + configuration.format());
@@ -142,8 +156,8 @@ public class CredentialController {
 
         List<IssuedCredential> issued = new ArrayList<>();
         for (String proofJwt : proofJwts) {
-            ECKey holderKey = proofValidator.verify(proofJwt, metadata.credentialIssuer().toString());
-            issued.add(new IssuedCredential(issuanceService.issue(configuration, claims, holderKey, baseUrl)));
+            ECKey holderKey = proofValidator.verify(context, proofJwt, metadata.credentialIssuer().toString());
+            issued.add(new IssuedCredential(issuanceService.issue(context, configuration, claims, holderKey)));
         }
 
         CredentialResponse response = new CredentialResponse(Optional.of(issued), Optional.empty());

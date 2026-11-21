@@ -18,4 +18,12 @@ import java.util.Map;
 public interface AuthorizationClaimsResolver {
 
     Map<String, String> resolveClaims(List<String> credentialConfigurationIds);
+
+    /**
+     * The claims for this tenant's authorization. Defaults to {@link #resolveClaims(List)}, for single-tenant resolvers; a
+     * multi-tenant resolver overrides this (and may refuse the context-free method).
+     */
+    default Map<String, String> resolveClaims(IssuerContext context, List<String> credentialConfigurationIds) {
+        return resolveClaims(credentialConfigurationIds);
+    }
 }

@@ -25,6 +25,12 @@
       <groupId>com.darkedges.oid4vci</groupId>
       <artifactId>oid4vci-issuer-web</artifactId>
     </dependency>
+    <!-- Multi-tenancy: only active when the application has it on the classpath and sets oid4vc.tenancy.enabled=true. -->
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vc-tenancy</artifactId>
+      <optional>true</optional>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -53,7 +59,8 @@
     <dependency>
       <groupId>jakarta.servlet</groupId>
       <artifactId>jakarta.servlet-api</artifactId>
-      <scope>test</scope>
+      <!-- provided: the tenancy auto-configuration resolves the issuer from the request (and tests need it too). -->
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 </project>

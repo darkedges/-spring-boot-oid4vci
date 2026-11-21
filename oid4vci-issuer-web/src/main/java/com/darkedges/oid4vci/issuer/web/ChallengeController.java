@@ -28,7 +28,7 @@ public class ChallengeController {
         this.challengeService = challengeService;
     }
 
-    @PostMapping(value = "/challenge", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "${oid4vci.issuer.attestation-challenge-endpoint-path:/challenge}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> challenge() {
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("attestation_challenge", challengeService.issue());

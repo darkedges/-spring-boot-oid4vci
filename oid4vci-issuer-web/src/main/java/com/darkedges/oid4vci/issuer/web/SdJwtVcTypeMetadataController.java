@@ -1,5 +1,7 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.metadata.CredentialConfiguration;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
 import com.darkedges.oid4vci.core.metadata.SdJwtVcCredentialConfiguration;
@@ -32,17 +34,23 @@ import java.time.Duration;
 @RestController
 public class SdJwtVcTypeMetadataController {
 
-    private final CredentialIssuerMetadataTemplate template;
+    private final IssuerMetadataTemplates templates;
+    private final IssuerContextResolver issuers;
 
     public SdJwtVcTypeMetadataController(CredentialIssuerMetadataTemplate template) {
-        this.template = template;
+        this(IssuerMetadataTemplates.fixed(template, null), IssuerContextResolver.SINGLE_TENANT);
+    }
+
+    public SdJwtVcTypeMetadataController(IssuerMetadataTemplates templates, IssuerContextResolver issuers) {
+        this.templates = templates;
+        this.issuers = issuers;
     }
 
     @GetMapping(value = "/vct/{credentialConfigurationId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> typeMetadata(
             @PathVariable String credentialConfigurationId, HttpServletRequest request) {
-        String baseUrl = RequestBaseUrl.resolve(request);
-        CredentialConfiguration configuration = template.resolve(baseUrl)
+        IssuerContext context = issuers.resolve(request);
+        CredentialConfiguration configuration = templates.credentialIssuer(context).resolve(context.issuerIdentifier())
                 .credentialConfigurationsSupported().get(credentialConfigurationId);
         if (!(configuration instanceof SdJwtVcCredentialConfiguration sdJwt)) {
             return ResponseEntity.notFound().build();

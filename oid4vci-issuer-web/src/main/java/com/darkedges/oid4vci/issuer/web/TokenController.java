@@ -1,5 +1,6 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.clientattestation.ClientAttestation;
 import com.darkedges.oid4vci.core.dpop.DpopProof;
 import com.darkedges.oid4vci.core.error.Oid4vciErrorCode;
@@ -60,12 +61,23 @@ public class TokenController {
     private final DpopProofValidator dpopProofValidator;
     private final Optional<ClientAttestationValidator> clientAttestationValidator;
     private final Optional<AuthorizationCodeService> authorizationCodeService;
+    private final IssuerContextResolver issuers;
 
     public TokenController(
             PreAuthorizedCodeService preAuthorizedCodeService, AccessTokenService accessTokenService,
             IssuedAccessTokenClaimsStore claimsStore, DpopProofValidator dpopProofValidator,
             Optional<ClientAttestationValidator> clientAttestationValidator,
             Optional<AuthorizationCodeService> authorizationCodeService) {
+        this(preAuthorizedCodeService, accessTokenService, claimsStore, dpopProofValidator, clientAttestationValidator,
+                authorizationCodeService, IssuerContextResolver.SINGLE_TENANT);
+    }
+
+    public TokenController(
+            PreAuthorizedCodeService preAuthorizedCodeService, AccessTokenService accessTokenService,
+            IssuedAccessTokenClaimsStore claimsStore, DpopProofValidator dpopProofValidator,
+            Optional<ClientAttestationValidator> clientAttestationValidator,
+            Optional<AuthorizationCodeService> authorizationCodeService, IssuerContextResolver issuers) {
+        this.issuers = issuers;
         this.preAuthorizedCodeService = preAuthorizedCodeService;
         this.accessTokenService = accessTokenService;
         this.claimsStore = claimsStore;
@@ -81,9 +93,9 @@ public class TokenController {
             @RequestHeader(value = ClientAttestation.ATTESTATION_HEADER_NAME, required = false) String clientAttestation,
             @RequestHeader(value = ClientAttestation.ATTESTATION_POP_HEADER_NAME, required = false) String clientAttestationPop,
             HttpServletRequest servletRequest) {
-        PreAuthorizedCodeSession session = redeem(params);
-
-        String baseUrl = RequestBaseUrl.resolve(servletRequest);
+        IssuerContext context = issuers.resolve(servletRequest);
+        PreAuthorizedCodeSession session = redeem(context, params);
+        String baseUrl = context.issuerIdentifier();
 
         if (clientAttestation != null || clientAttestationPop != null) {
             if (clientAttestation == null || clientAttestationPop == null) {
@@ -94,7 +106,7 @@ public class TokenController {
             if (clientAttestationValidator.isEmpty()) {
                 throw new Oid4vciException(Oid4vciErrorCode.INVALID_CLIENT, "attest_jwt_client_auth is not supported by this issuer");
             }
-            clientAttestationValidator.get().verifyForTokenRequest(clientAttestation, clientAttestationPop, baseUrl);
+            clientAttestationValidator.get().verifyForTokenRequest(context, clientAttestation, clientAttestationPop);
         }
 
         Optional<String> dpopJkt = Optional.empty();
@@ -103,20 +115,20 @@ public class TokenController {
             dpopJkt = Optional.of(DpopProofValidator.computeThumbprint(proofKey));
         }
 
-        AccessTokenService.IssuedAccessToken issued = accessTokenService.issue(session, dpopJkt, baseUrl);
-        claimsStore.save(issued.subject(), session.claims(), issued.expiresAt());
+        AccessTokenService.IssuedAccessToken issued = accessTokenService.issue(context, session, dpopJkt);
+        claimsStore.save(context.scope(issued.subject()), session.claims(), issued.expiresAt());
 
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(TokenResponseWriter.write(issued.tokenResponse()).toString());
     }
 
-    private PreAuthorizedCodeSession redeem(Map<String, String> params) {
+    private PreAuthorizedCodeSession redeem(IssuerContext context, Map<String, String> params) {
         String grantType = params.get("grant_type");
         if (GrantType.PRE_AUTHORIZED_CODE.value().equals(grantType)) {
-            return preAuthorizedCodeService.redeem(PreAuthorizedCodeTokenRequest.fromFormParams(params));
+            return preAuthorizedCodeService.redeem(context, PreAuthorizedCodeTokenRequest.fromFormParams(params));
         }
         if (GrantType.AUTHORIZATION_CODE.value().equals(grantType) && authorizationCodeService.isPresent()) {
-            return authorizationCodeService.get().redeem(AuthorizationCodeTokenRequest.fromFormParams(params));
+            return authorizationCodeService.get().redeem(context, AuthorizationCodeTokenRequest.fromFormParams(params));
         }
         throw new Oid4vciException(Oid4vciErrorCode.UNSUPPORTED_GRANT_TYPE, "unsupported or unknown grant_type: " + grantType);
     }

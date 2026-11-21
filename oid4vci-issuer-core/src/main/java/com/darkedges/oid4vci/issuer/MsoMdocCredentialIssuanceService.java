@@ -34,15 +34,18 @@ public final class MsoMdocCredentialIssuanceService implements CredentialIssuanc
      * {@code DemoMdocCredentialConfig}'s own self-issuance convention in oid4vp-demo-wallet. */
     private static final String DEFAULT_NAMESPACE = "org.iso.18013.5.1";
 
-    private final PrivateKey issuerPrivateKey;
-    private final List<String> issuerCertificateChain;
+    private final IssuerKeys keys;
     private final Duration validity;
     private final Clock clock;
 
     public MsoMdocCredentialIssuanceService(
             PrivateKey issuerPrivateKey, List<String> issuerCertificateChain, Duration validity, Clock clock) {
-        this.issuerPrivateKey = issuerPrivateKey;
-        this.issuerCertificateChain = issuerCertificateChain;
+        this(IssuerKeys.fixed(null, new IssuerKeys.MdocSigningKey(issuerPrivateKey, issuerCertificateChain)), validity, clock);
+    }
+
+    /** Signs each tenant's mdocs with that tenant's mdoc key. */
+    public MsoMdocCredentialIssuanceService(IssuerKeys keys, Duration validity, Clock clock) {
+        this.keys = keys;
         this.validity = validity;
         this.clock = clock;
     }
@@ -54,6 +57,15 @@ public final class MsoMdocCredentialIssuanceService implements CredentialIssuanc
 
     @Override
     public String issue(CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey, String issuerBaseUrl) {
+        return issue(IssuerContext.single(issuerBaseUrl), configuration, claims, holderKey);
+    }
+
+    @Override
+    public String issue(IssuerContext context, CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey) {
+        IssuerKeys.MdocSigningKey mdocKey = keys.mdocKey(context)
+                .orElseThrow(() -> new IllegalStateException("this issuer has no mdoc signing key"));
+        PrivateKey issuerPrivateKey = mdocKey.privateKey();
+        List<String> issuerCertificateChain = mdocKey.certificateChain();
         if (!(configuration instanceof MsoMdocCredentialConfiguration mdocConfiguration)) {
             throw new IllegalArgumentException(
                     "expected an MsoMdocCredentialConfiguration, got: " + configuration.getClass().getSimpleName());

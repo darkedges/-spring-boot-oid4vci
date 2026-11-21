@@ -17,8 +17,18 @@ public final class PreAuthorizedCodeService {
         this.clock = clock;
     }
 
+    /** Stores a pre-authorized code for a Credential Offer of this tenant. */
+    public void offer(IssuerContext context, String preAuthorizedCode, PreAuthorizedCodeSession session) {
+        store.save(context.scope(preAuthorizedCode), session);
+    }
+
     public PreAuthorizedCodeSession redeem(PreAuthorizedCodeTokenRequest request) {
-        PreAuthorizedCodeSession session = store.consume(request.preAuthorizedCode())
+        return redeem(IssuerContext.single(""), request);
+    }
+
+    /** Redeems a code this tenant offered; one offered by another tenant is unknown here. */
+    public PreAuthorizedCodeSession redeem(IssuerContext context, PreAuthorizedCodeTokenRequest request) {
+        PreAuthorizedCodeSession session = context.scopeIfValid(request.preAuthorizedCode()).flatMap(store::consume)
                 .orElseThrow(() -> new Oid4vciException(
                         Oid4vciErrorCode.INVALID_GRANT, "unknown or already-redeemed pre-authorized_code"));
 

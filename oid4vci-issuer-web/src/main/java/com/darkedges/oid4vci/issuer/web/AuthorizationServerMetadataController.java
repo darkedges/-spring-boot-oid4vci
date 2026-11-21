@@ -1,5 +1,7 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.metadata.AuthorizationServerMetadataTemplate;
 import com.darkedges.oid4vci.core.metadata.AuthorizationServerMetadataWriter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,17 +24,36 @@ import java.time.Duration;
 @RestController
 public class AuthorizationServerMetadataController {
 
-    private final AuthorizationServerMetadataTemplate template;
+    private final IssuerMetadataTemplates templates;
+    private final IssuerContextResolver issuers;
 
     public AuthorizationServerMetadataController(AuthorizationServerMetadataTemplate template) {
-        this.template = template;
+        this.templates = new IssuerMetadataTemplates() {
+            @Override
+            public com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate credentialIssuer(IssuerContext context) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public java.util.Optional<AuthorizationServerMetadataTemplate> authorizationServer(IssuerContext context) {
+                return java.util.Optional.of(template);
+            }
+        };
+        this.issuers = IssuerContextResolver.SINGLE_TENANT;
+    }
+
+    public AuthorizationServerMetadataController(IssuerMetadataTemplates templates, IssuerContextResolver issuers) {
+        this.templates = templates;
+        this.issuers = issuers;
     }
 
     @GetMapping(value = "/.well-known/oauth-authorization-server", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> metadata(HttpServletRequest request) {
-        String baseUrl = RequestBaseUrl.resolve(request);
+        IssuerContext context = issuers.resolve(request);
+        AuthorizationServerMetadataTemplate template = templates.authorizationServer(context).orElse(null);
+        if (template == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)))
-                .body(AuthorizationServerMetadataWriter.write(template.resolve(baseUrl)).toString());
+                .body(AuthorizationServerMetadataWriter.write(template.resolve(context.issuerIdentifier())).toString());
     }
 }
