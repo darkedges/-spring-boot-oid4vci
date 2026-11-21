@@ -1,5 +1,6 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import org.springframework.mock.web.MockHttpServletRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
@@ -16,7 +17,7 @@ class JwksControllerTest {
     void servesThePublicKeyAsAJwkSetWithNoPrivateMaterial() throws Exception {
         ECKey issuerKey = new ECKeyGenerator(Curve.P_256).keyID("issuer-1").generate();
 
-        var response = new JwksController(issuerKey).jwks();
+        var response = new JwksController(issuerKey).jwks(new MockHttpServletRequest());
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         var keys = MAPPER.readTree(response.getBody()).get("keys");

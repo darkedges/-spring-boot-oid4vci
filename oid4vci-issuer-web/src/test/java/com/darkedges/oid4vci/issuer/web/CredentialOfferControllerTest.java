@@ -1,5 +1,6 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import org.springframework.mock.web.MockHttpServletRequest;
 import com.darkedges.oid4vci.core.offer.CredentialOffer;
 import com.darkedges.oid4vci.issuer.InMemoryCredentialOfferStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,7 +25,7 @@ class CredentialOfferControllerTest {
                 URI.create("https://issuer.example.org"), List.of("UniversityDegreeCredential"), Optional.empty());
         store.save("offer-1", offer);
 
-        var response = new CredentialOfferController(store).offer("offer-1");
+        var response = new CredentialOfferController(store).offer("offer-1", new MockHttpServletRequest());
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(MAPPER.readTree(response.getBody()).get("credential_issuer").asText()).isEqualTo("https://issuer.example.org");
@@ -34,6 +35,6 @@ class CredentialOfferControllerTest {
     void respondsNotFoundForAnUnknownOfferId() {
         CredentialOfferController controller = new CredentialOfferController(new InMemoryCredentialOfferStore());
 
-        assertThatThrownBy(() -> controller.offer("does-not-exist")).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> controller.offer("does-not-exist", new MockHttpServletRequest())).isInstanceOf(ResponseStatusException.class);
     }
 }

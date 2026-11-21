@@ -95,6 +95,11 @@
       </dependency>
       <dependency>
         <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vc-tenancy</artifactId>
+        <version>${oid4vp.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
         <artifactId>oid4vp-format-sdjwt-vc</artifactId>
         <version>${oid4vp.version}</version>
       </dependency>

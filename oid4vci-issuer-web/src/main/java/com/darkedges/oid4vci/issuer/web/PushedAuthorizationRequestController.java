@@ -46,12 +46,20 @@ public class PushedAuthorizationRequestController {
 
     private final PushedAuthorizationRequestStore store;
 
+    private final IssuerContextResolver issuers;
+
     public PushedAuthorizationRequestController(PushedAuthorizationRequestStore store) {
+        this(store, IssuerContextResolver.SINGLE_TENANT);
+    }
+
+    public PushedAuthorizationRequestController(PushedAuthorizationRequestStore store, IssuerContextResolver issuers) {
         this.store = store;
+        this.issuers = issuers;
     }
 
     @PostMapping(value = "/par", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<String> pushAuthorizationRequest(@RequestParam Map<String, String> params) {
+    public ResponseEntity<String> pushAuthorizationRequest(@RequestParam Map<String, String> params,
+                                                           jakarta.servlet.http.HttpServletRequest servletRequest) {
         URI redirectUri = parseRedirectUri(params.get("redirect_uri"));
         if (redirectUri == null) {
             return errorResponse("invalid_request", "redirect_uri is missing or is not a valid absolute URI");
@@ -70,7 +78,7 @@ public class PushedAuthorizationRequestController {
         }
 
         String requestUri = REQUEST_URI_PREFIX + randomToken();
-        store.save(requestUri, new PushedAuthorizationRequestEntry(request, Instant.now().plus(REQUEST_URI_TTL)));
+        store.save(issuers.resolve(servletRequest).scope(requestUri), new PushedAuthorizationRequestEntry(request, Instant.now().plus(REQUEST_URI_TTL)));
 
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("request_uri", requestUri);

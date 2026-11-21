@@ -237,6 +237,42 @@ theory:
   token as ordinary business logic; the Credential Endpoint is protected by a standard OAuth2 bearer
   access token, which Spring Security's built-in `oauth2ResourceServer()` already solves.
 
+## Multi-tenant issuers
+
+One issuer deployment can serve many tenants, one per AuthStack environment, through oid4vp's `oid4vc-tenancy` module (see its
+`docs/multi-tenancy.md`). A tenant is reached in three ways:
+
+| Routing | Example |
+|---|---|
+| Platform subdomain | `https://bank.issuer.zkp.au` |
+| Verified custom domain | `https://issuer.bank.example` |
+| Path on the shared host | `https://issuer.zkp.au/t/bank` |
+
+A path tenant's metadata is at the inserted well-known URL, such as `/.well-known/openid-credential-issuer/t/bank`. Without
+`oid4vc.tenancy.enabled=true`, an issuer is single-tenant, exactly as before.
+
+**How it works.**
+- **`IssuerContext`:** each request's tenant and Credential Issuer Identifier. `IssuerContextResolver` resolves it from the request,
+  in place of `RequestBaseUrl`.
+- **`IssuerKeys`:** the signing and mdoc keys, per tenant. With tenancy, every tenant has its own keys, created on first use and
+  certified by the deployment's CA. Without tenancy, the application's `ECKey` and `MdocIssuerKeyMaterial` beans are used, as before.
+- **Isolation:** whatever the issuer keeps between requests (pre-authorized and authorization codes, PAR `request_uri`s, nonces,
+  offers, the claims behind an access token) is stored under a key scoped to its tenant (`IssuerContext.scope`). What one tenant
+  issued is unknown to every other. The default tenant's keys are unscoped, so single-tenant code that stores codes directly keeps
+  working.
+- **Access tokens** carry `iss` and `aud`, both the tenant's identifier. `IssuerAccessTokenDecoder` (the `JwtDecoder` bean) checks
+  them, and the signature, against the tenant of the request.
+- **Per-tenant settings,** edited from the AuthStack console:
+  - `credentialConfigurationsSupported`, `batchCredentialIssuanceMaxSize` and `clientAttestation` (the trusted Wallet Provider);
+  - a setting a tenant leaves out falls back to the deployment's `oid4vci.issuer.*` value;
+  - the console's admin API refuses settings that wouldn't work.
+
+**SPI changes.**
+- `CredentialIssuanceService` and `AuthorizationClaimsResolver` gained context-aware default methods. Existing single-tenant
+  implementations, such as the bank's, compile and behave unchanged.
+- `oid4vci.issuer.credential-endpoint-path`, `nonce-endpoint-path` and `attestation-challenge-endpoint-path` now move the endpoint
+  itself. Before, they changed only what the metadata advertised.
+
 ## Bank staff onboarding
 
 See [bank-onboarding](bank-onboarding/README.md) for the PostgreSQL-backed HR portal, passport credential presentation, bank staff issuance, and wallet sign-in.

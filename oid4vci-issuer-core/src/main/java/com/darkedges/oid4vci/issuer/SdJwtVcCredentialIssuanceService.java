@@ -35,15 +35,24 @@ public final class SdJwtVcCredentialIssuanceService implements CredentialIssuanc
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final ECKey issuerKey;
-    private final List<String> certificateChain;
+    private final IssuerKeys keys;
+    /** A fixed chain for a single-tenant issuer; {@code null}: each tenant key's own {@code x5c}. */
+    private final List<String> fixedCertificateChain;
     private final Duration validity;
     private final Clock clock;
 
     public SdJwtVcCredentialIssuanceService(
             ECKey issuerKey, List<String> certificateChain, Duration validity, Clock clock) {
-        this.issuerKey = issuerKey;
-        this.certificateChain = certificateChain;
+        this.keys = IssuerKeys.fixed(issuerKey, null);
+        this.fixedCertificateChain = certificateChain == null ? List.of() : List.copyOf(certificateChain);
+        this.validity = validity;
+        this.clock = clock;
+    }
+
+    /** Signs each tenant's credentials with that tenant's signing key, carrying the key's own certificate chain as {@code x5c}. */
+    public SdJwtVcCredentialIssuanceService(IssuerKeys keys, Duration validity, Clock clock) {
+        this.keys = keys;
+        this.fixedCertificateChain = null;
         this.validity = validity;
         this.clock = clock;
     }
@@ -55,6 +64,15 @@ public final class SdJwtVcCredentialIssuanceService implements CredentialIssuanc
 
     @Override
     public String issue(CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey, String issuerBaseUrl) {
+        return issue(IssuerContext.single(issuerBaseUrl), configuration, claims, holderKey);
+    }
+
+    @Override
+    public String issue(IssuerContext context, CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey) {
+        String issuerBaseUrl = context.issuerIdentifier();
+        ECKey issuerKey = keys.signingKey(context);
+        List<String> certificateChain = fixedCertificateChain != null ? fixedCertificateChain
+                : issuerKey.getX509CertChain() == null ? List.of() : issuerKey.getX509CertChain().stream().map(Object::toString).toList();
         if (!(configuration instanceof SdJwtVcCredentialConfiguration sdJwtVcConfiguration)) {
             throw new IllegalArgumentException(
                     "expected an SdJwtVcCredentialConfiguration, got: " + configuration.getClass().getSimpleName());

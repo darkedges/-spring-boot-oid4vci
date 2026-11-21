@@ -31,4 +31,12 @@ public interface CredentialIssuanceService {
      *         what a Credential Response's {@code credentials[].credential} field carries.
      */
     String issue(CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey, String issuerBaseUrl);
+
+    /**
+     * Issues for this tenant: with its keys, and its Credential Issuer Identifier as {@code iss}. The default suits a single-tenant
+     * service, which issues as {@code issuerBaseUrl} with its one key; a multi-tenant service overrides this.
+     */
+    default String issue(IssuerContext context, CredentialConfiguration configuration, Map<String, String> claims, ECKey holderKey) {
+        return issue(configuration, claims, holderKey, context.issuerIdentifier());
+    }
 }

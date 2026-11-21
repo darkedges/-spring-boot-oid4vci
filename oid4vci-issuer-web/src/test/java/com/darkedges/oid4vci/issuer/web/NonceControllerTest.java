@@ -1,5 +1,6 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import org.springframework.mock.web.MockHttpServletRequest;
 import com.darkedges.oid4vci.issuer.InMemoryNonceStore;
 import com.darkedges.oid4vci.issuer.NonceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,7 +19,7 @@ class NonceControllerTest {
     void issuesAFreshNonceWithNoStoreCaching() throws Exception {
         NonceController controller = new NonceController(new NonceService(new InMemoryNonceStore(), Clock.systemUTC(), Duration.ofMinutes(5)));
 
-        var response = controller.nonce();
+        var response = controller.nonce(new MockHttpServletRequest());
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(MAPPER.readTree(response.getBody()).get("c_nonce").asText()).isNotBlank();

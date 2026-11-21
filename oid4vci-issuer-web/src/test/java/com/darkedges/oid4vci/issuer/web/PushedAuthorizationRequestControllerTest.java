@@ -1,5 +1,6 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import org.springframework.mock.web.MockHttpServletRequest;
 import com.darkedges.oid4vci.issuer.InMemoryPushedAuthorizationRequestStore;
 import com.darkedges.oid4vci.issuer.PushedAuthorizationRequestEntry;
 import com.darkedges.oid4vci.issuer.PushedAuthorizationRequestStore;
@@ -26,7 +27,7 @@ class PushedAuthorizationRequestControllerTest {
         PushedAuthorizationRequestStore store = new InMemoryPushedAuthorizationRequestStore();
         PushedAuthorizationRequestController controller = new PushedAuthorizationRequestController(store);
 
-        var response = controller.pushAuthorizationRequest(baseParams());
+        var response = controller.pushAuthorizationRequest(baseParams(), new MockHttpServletRequest());
 
         assertThat(response.getStatusCode().value()).isEqualTo(201);
         JsonNode body = MAPPER.readTree(response.getBody());
@@ -46,7 +47,7 @@ class PushedAuthorizationRequestControllerTest {
         Map<String, String> params = baseParams();
         params.remove("redirect_uri");
 
-        var response = controller.pushAuthorizationRequest(params);
+        var response = controller.pushAuthorizationRequest(params, new MockHttpServletRequest());
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
     }
@@ -59,7 +60,7 @@ class PushedAuthorizationRequestControllerTest {
         params.remove("code_challenge");
         params.remove("code_challenge_method");
 
-        var response = controller.pushAuthorizationRequest(params);
+        var response = controller.pushAuthorizationRequest(params, new MockHttpServletRequest());
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
     }

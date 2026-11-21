@@ -15,14 +15,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class NonceController {
 
     private final NonceService nonceService;
+    private final IssuerContextResolver issuers;
 
     public NonceController(NonceService nonceService) {
-        this.nonceService = nonceService;
+        this(nonceService, IssuerContextResolver.SINGLE_TENANT);
     }
 
-    @PostMapping(value = "/nonce", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<String> nonce() {
-        NonceResponse response = new NonceResponse(nonceService.issue());
+    public NonceController(NonceService nonceService, IssuerContextResolver issuers) {
+        this.nonceService = nonceService;
+        this.issuers = issuers;
+    }
+
+    @PostMapping(value = "${oid4vci.issuer.nonce-endpoint-path:/nonce}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> nonce(jakarta.servlet.http.HttpServletRequest request) {
+        NonceResponse response = new NonceResponse(nonceService.issue(issuers.resolve(request)));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(NonceResponseWriter.write(response).toString());
     }
 }

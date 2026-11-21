@@ -33,9 +33,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class Oid4vciExceptionHandler {
 
     private final NonceService nonceService;
+    private final IssuerContextResolver issuers;
 
     public Oid4vciExceptionHandler(NonceService nonceService) {
+        this(nonceService, IssuerContextResolver.SINGLE_TENANT);
+    }
+
+    public Oid4vciExceptionHandler(NonceService nonceService, IssuerContextResolver issuers) {
         this.nonceService = nonceService;
+        this.issuers = issuers;
     }
 
     @ExceptionHandler(AttestationChallengeRequiredException.class)
@@ -48,14 +54,19 @@ public class Oid4vciExceptionHandler {
                 .body(body.toString());
     }
 
-    @ExceptionHandler(Oid4vciException.class)
+    /** As {@link #handle(Oid4vciException, jakarta.servlet.http.HttpServletRequest)}, for a single-tenant issuer. */
     public ResponseEntity<String> handle(Oid4vciException e) {
+        return handle(e, null);
+    }
+
+    @ExceptionHandler(Oid4vciException.class)
+    public ResponseEntity<String> handle(Oid4vciException e, jakarta.servlet.http.HttpServletRequest request) {
         HttpStatus status = e.errorCode() == Oid4vciErrorCode.INVALID_TOKEN || e.errorCode() == Oid4vciErrorCode.INVALID_CLIENT
                 ? HttpStatus.UNAUTHORIZED : HttpStatus.BAD_REQUEST;
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("error", e.errorCode().value());
         if (e.errorCode() == Oid4vciErrorCode.INVALID_PROOF || e.errorCode() == Oid4vciErrorCode.INVALID_NONCE) {
-            body.put("c_nonce", nonceService.issue());
+            body.put("c_nonce", request == null ? nonceService.issue() : nonceService.issue(issuers.resolve(request)));
         }
         return ResponseEntity.status(status).cacheControl(CacheControl.noStore())
                 .contentType(MediaType.APPLICATION_JSON)

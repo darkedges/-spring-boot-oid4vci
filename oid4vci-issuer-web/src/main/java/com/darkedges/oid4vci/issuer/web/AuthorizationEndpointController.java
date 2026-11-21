@@ -1,5 +1,7 @@
 package com.darkedges.oid4vci.issuer.web;
 
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.authorize.AuthorizationRequest;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadata;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
@@ -76,16 +78,24 @@ public class AuthorizationEndpointController {
 
     private final AuthorizationCodeStore codeStore;
     private final PushedAuthorizationRequestStore pushedRequestStore;
-    private final CredentialIssuerMetadataTemplate template;
+    private final IssuerMetadataTemplates templates;
     private final AuthorizationClaimsResolver claimsResolver;
+    private final IssuerContextResolver issuers;
 
     public AuthorizationEndpointController(
             AuthorizationCodeStore codeStore, PushedAuthorizationRequestStore pushedRequestStore,
             CredentialIssuerMetadataTemplate template, AuthorizationClaimsResolver claimsResolver) {
+        this(codeStore, pushedRequestStore, IssuerMetadataTemplates.fixed(template, null), claimsResolver, IssuerContextResolver.SINGLE_TENANT);
+    }
+
+    public AuthorizationEndpointController(
+            AuthorizationCodeStore codeStore, PushedAuthorizationRequestStore pushedRequestStore,
+            IssuerMetadataTemplates templates, AuthorizationClaimsResolver claimsResolver, IssuerContextResolver issuers) {
         this.codeStore = codeStore;
         this.pushedRequestStore = pushedRequestStore;
-        this.template = template;
+        this.templates = templates;
         this.claimsResolver = claimsResolver;
+        this.issuers = issuers;
     }
 
     @GetMapping("/authorize")
@@ -97,7 +107,8 @@ public class AuthorizationEndpointController {
     }
 
     private ResponseEntity<?> authorizeInline(Map<String, String> params, HttpServletRequest servletRequest) {
-        String issuer = RequestBaseUrl.resolve(servletRequest);
+        IssuerContext context = issuers.resolve(servletRequest);
+        String issuer = context.issuerIdentifier();
         URI redirectUri = parseRedirectUri(params.get("redirect_uri"));
         if (redirectUri == null) {
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN)
@@ -116,7 +127,7 @@ public class AuthorizationEndpointController {
             return redirectWithError(redirectUri, request.state().orElse(null), error.get().error(), error.get().description(), issuer);
         }
 
-        return issueCodeAndRedirect(request, issuer);
+        return issueCodeAndRedirect(request, context);
     }
 
     private ResponseEntity<?> authorizeWithPushedRequest(Map<String, String> params, HttpServletRequest servletRequest) {
@@ -125,7 +136,8 @@ public class AuthorizationEndpointController {
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body("request_uri is missing");
         }
 
-        PushedAuthorizationRequestEntry entry = pushedRequestStore.consume(requestUri).orElse(null);
+        IssuerContext context = issuers.resolve(servletRequest);
+        PushedAuthorizationRequestEntry entry = context.scopeIfValid(requestUri).flatMap(pushedRequestStore::consume).orElse(null);
         if (entry == null || entry.expiresAt().isBefore(Instant.now())) {
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN)
                     .body("request_uri is unknown, already used, or expired");
@@ -137,13 +149,14 @@ public class AuthorizationEndpointController {
                     .body("client_id does not match the pushed authorization request");
         }
 
-        return issueCodeAndRedirect(entry.request(), RequestBaseUrl.resolve(servletRequest));
+        return issueCodeAndRedirect(entry.request(), context);
     }
 
     /** The tail both authorization flows share once a validated {@link AuthorizationRequest} is in hand:
      * resolve which credential configuration(s) it's for, mint a code, and redirect. */
-    private ResponseEntity<?> issueCodeAndRedirect(AuthorizationRequest request, String issuer) {
-        CredentialIssuerMetadata metadata = template.resolve(issuer);
+    private ResponseEntity<?> issueCodeAndRedirect(AuthorizationRequest request, IssuerContext context) {
+        String issuer = context.issuerIdentifier();
+        CredentialIssuerMetadata metadata = templates.credentialIssuer(context).resolve(issuer);
         List<String> configurationIds;
         if (!request.authorizationDetails().isEmpty()) {
             configurationIds = request.authorizationDetails().stream()
@@ -174,9 +187,9 @@ public class AuthorizationEndpointController {
         }
 
         String code = randomCode();
-        codeStore.save(code, new AuthorizationCodeEntry(
+        codeStore.save(context.scope(code), new AuthorizationCodeEntry(
                 new PreAuthorizedCodeSession(
-                        configurationIds, Optional.empty(), claimsResolver.resolveClaims(configurationIds),
+                        configurationIds, Optional.empty(), claimsResolver.resolveClaims(context, configurationIds),
                         Instant.now().plus(CODE_TTL)),
                 request.redirectUri(), request.codeChallenge(), request.codeChallengeMethod()));
 
