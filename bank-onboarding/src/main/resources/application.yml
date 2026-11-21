@@ -57,6 +57,15 @@ bank:
   applicant-entry: ${BANK_APPLICANT_ENTRY:portal}
   applicant-entry-url: ${BANK_APPLICANT_ENTRY_URL:}
   # The Journey API (/api/journey/v1) for Authr. Off until an issuer is set.
+  # The AuthStack directory: the bank creates each person's AuthStack user and keeps it current (AuthStackDirectory). Off while unset.
+  authstack:
+    api-url: ${BANK_AUTHSTACK_API_URL:}
+    token-url: ${BANK_AUTHSTACK_TOKEN_URL:}
+    environment-id: ${BANK_AUTHSTACK_ENVIRONMENT_ID:}
+    client-id: ${BANK_AUTHSTACK_CLIENT_ID:}
+    client-secret: ${BANK_AUTHSTACK_CLIENT_SECRET:}
+    population-id: ${BANK_AUTHSTACK_POPULATION_ID:}
+    console-me-url: ${BANK_AUTHSTACK_CONSOLE_ME_URL:}
   journey:
     issuer: ${BANK_JOURNEY_ISSUER:}
     jwk-set-uri: ${BANK_JOURNEY_JWK_SET_URI:}

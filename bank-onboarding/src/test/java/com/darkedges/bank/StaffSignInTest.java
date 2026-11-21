@@ -40,7 +40,19 @@ class StaffSignInTest {
         assertThat(signIn.staffIdFrom(null)).isEmpty();
     }
 
+    @Test void theIdentityNamesThePersonAndTheSessionIsTheirCurrentAttempt() throws Exception {
+        UUID person = UUID.fromString("0b1c2d3e-0000-4000-8000-000000000001");
+        when(db.queryForList(eq(DirectoryOutbox.CURRENT_ATTEMPT), eq(UUID.class), eq(person))).thenReturn(List.of(STAFF));
+        when(db.queryForObject(anyString(), eq(Integer.class), eq(STAFF))).thenReturn(1);
+        var request = new MockHttpServletRequest(); var response = new MockHttpServletResponse();
+        request.getSession(true);
+        signIn.successHandler().onAuthenticationSuccess(request, response, token("staff", Map.of("email", "staff-" + person + "@staff.bank.example")));
+        assertThat(response.getRedirectedUrl()).isEqualTo("/staff");
+        assertThat(request.getSession().getAttribute("staff")).isEqualTo(STAFF.toString());
+    }
+
     @Test void anActiveStaffMemberGetsAStaffSessionAndNoSignedInPrincipal() throws Exception {
+        when(db.queryForList(eq(DirectoryOutbox.CURRENT_ATTEMPT), eq(UUID.class), eq(STAFF))).thenReturn(List.of(STAFF));
         when(db.queryForObject(anyString(), eq(Integer.class), eq(STAFF))).thenReturn(1);
         var request = new MockHttpServletRequest(); var response = new MockHttpServletResponse();
         request.getSession(true).setAttribute("SPRING_SECURITY_CONTEXT", "previous");

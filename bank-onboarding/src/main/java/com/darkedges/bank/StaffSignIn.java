@@ -40,6 +40,11 @@ public class StaffSignIn {
         return match.matches() ? Optional.of(UUID.fromString(match.group(1))) : Optional.empty();
     }
 
+    Optional<UUID> currentAttempt(UUID anyAttempt) {
+        var rows = db.queryForList(DirectoryOutbox.CURRENT_ATTEMPT, UUID.class, anyAttempt);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+    }
+
     boolean active(UUID id) {
         return db.queryForObject("select count(*) from bank_hire h where h.id=? and h.status='ACTIVE' and not exists (select 1 from bank_hire newer where newer.previous_hire_id=h.id)", Integer.class, id) == 1;
     }
@@ -55,7 +60,10 @@ public class StaffSignIn {
             // Not kept as a signed-in principal: the staff session below is the only thing this sign-in gives.
             SecurityContextHolder.clearContext();
             new HttpSessionSecurityContextRepository().saveContext(SecurityContextHolder.createEmptyContext(), request, response);
-            var staff = token.getPrincipal() instanceof OidcUser user ? staffIdFrom(user.getEmail()) : Optional.<UUID>empty();
+            // The address names the person (or, for an identity created before one-user-per-person, an attempt): the staff session is
+            // the person's current attempt, and only while it is active.
+            var named = token.getPrincipal() instanceof OidcUser user ? staffIdFrom(user.getEmail()) : Optional.<UUID>empty();
+            var staff = named.flatMap(this::currentAttempt);
             if (staff.isEmpty() || !active(staff.get())) {
                 response.sendRedirect("/?staff=refused");
                 return;
