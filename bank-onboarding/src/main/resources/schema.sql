@@ -35,3 +35,10 @@ CREATE TABLE IF NOT EXISTS bank_applicant_ref (
  expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS bank_applicant_ref_hire ON bank_applicant_ref(hire_id);
+
+-- The AuthStack directory: one AuthStack user per person (the first attempt of a reactivation chain), kept current from this outbox.
+ALTER TABLE bank_hire ADD COLUMN IF NOT EXISTS authstack_user_id text;
+CREATE TABLE IF NOT EXISTS bank_directory_outbox (
+ person_id uuid PRIMARY KEY REFERENCES bank_hire(id), changed_at timestamptz NOT NULL DEFAULT now(),
+ synced_at timestamptz, attempts integer NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT now(), last_error text
+);

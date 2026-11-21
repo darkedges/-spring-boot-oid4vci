@@ -37,6 +37,15 @@ public class BankSecurity {
      * bank.journey.issuer, for this API's audience and scope, to a client named in bank.journey.clients. Stateless, no cookies, no CSRF
      * (a bearer token is not sent by a browser on its own). With no issuer configured the API is off: every call is refused.
      */
+    /**
+     * The AuthStack console's operations on a staff member (DirectoryActionsController). Bearer only, stateless, no CSRF: the controller
+     * checks the administrator's AuthStack console token with AuthStack itself.
+     */
+    @Bean @Order(-1) SecurityFilterChain directoryActions(HttpSecurity http) throws Exception {
+        return http.securityMatcher("/api/directory/**").csrf(c -> c.disable())
+            .sessionManagement(s -> s.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(a -> a.anyRequest().permitAll()).build();
+    }
     @Bean @Order(0) SecurityFilterChain journey(HttpSecurity http,
             @Value("${bank.journey.issuer:}") String issuer, @Value("${bank.journey.jwk-set-uri:}") String jwkSetUri,
             @Value("${bank.journey.audience:bank-journey}") String audience, @Value("${bank.journey.scope:bank.journey}") String scope,
@@ -100,7 +109,7 @@ public class BankSecurity {
             }))).build();
     }
     // Internal authorization metadata lives in PostgreSQL, never in credential claims.
-    @Bean(name="sdJwtVcCredentialIssuanceService") CredentialIssuanceService staffIssuance(ECKey key, JdbcTemplate db, @Value("${bank.base-url}") String canonicalBase) {
+    @Bean(name="sdJwtVcCredentialIssuanceService") CredentialIssuanceService staffIssuance(ECKey key, JdbcTemplate db, @Value("${bank.base-url}") String canonicalBase, org.springframework.beans.factory.ObjectProvider<DirectoryOutbox> directory) {
         var delegate = new SdJwtVcCredentialIssuanceService(key, List.of(), Duration.ofDays(30), Clock.systemUTC());
         return new CredentialIssuanceService() {
             public CredentialFormat format() { return CredentialFormat.DC_SD_JWT; }
@@ -117,6 +126,8 @@ public class BankSecurity {
                     String result = delegate.issue(config, claims, holder, base);
                     db.update("update bank_hire set status='ACTIVE',issued_credential=? where id=?", result, id);
                     db.update("insert into bank_audit(hire_id,action,actor) values (?,'ISSUED','issuer')", id);
+                    // The AuthStack user shows the new credential and becomes able to sign in (AuthStackDirectory).
+                    directory.ifAvailable(outbox -> outbox.changed(id));
                     return result;
                 });
             }

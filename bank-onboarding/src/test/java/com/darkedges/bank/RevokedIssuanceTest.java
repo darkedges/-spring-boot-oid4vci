@@ -18,7 +18,7 @@ class RevokedIssuanceTest {
         when(db.getDataSource()).thenReturn(source);when(source.getConnection()).thenReturn(connection);when(connection.getAutoCommit()).thenReturn(true);
         UUID id=UUID.randomUUID();when(db.queryForMap(anyString(),eq(id))).thenReturn(Map.of("status","ACTIVE"));
         when(db.queryForList(anyString(),eq(id))).thenReturn(List.of(Map.of("id",UUID.randomUUID())));
-        var key=new ECKeyGenerator(Curve.P_256).generate();var service=new BankSecurity().staffIssuance(key,db,"http://bank");
+        var key=new ECKeyGenerator(Curve.P_256).generate();var service=new BankSecurity().staffIssuance(key,db,"http://bank",new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(DirectoryOutbox.class));
         var config=new SdJwtVcCredentialConfiguration("http://bank/vct/BankStaffCredential",List.of(),Map.of(),List.of(),List.of(),Optional.empty());
         assertThatThrownBy(()->service.issue(config,Map.of("staff_id",id.toString()),key.toPublicJWK(),"http://bank")).isInstanceOf(Oid4vciException.class).hasMessageContaining("superseded");
         verify(db,never()).update(anyString(),any(Object[].class));
@@ -32,7 +32,7 @@ class RevokedIssuanceTest {
         UUID id=UUID.randomUUID();
         when(db.queryForMap(anyString(),eq(id))).thenReturn(Map.of("status","REVOKED"));
         var key=new ECKeyGenerator(Curve.P_256).generate();
-        var service=new BankSecurity().staffIssuance(key,db,"http://bank");
+        var service=new BankSecurity().staffIssuance(key,db,"http://bank",new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(DirectoryOutbox.class));
         var config=new SdJwtVcCredentialConfiguration("http://bank/vct/BankStaffCredential",List.of(),Map.of(),List.of(),List.of(),Optional.empty());
         assertThatThrownBy(()->service.issue(config,Map.of("staff_id",id.toString()),key.toPublicJWK(),"http://bank"))
                 .isInstanceOf(Oid4vciException.class).hasMessageContaining("no longer authorized");

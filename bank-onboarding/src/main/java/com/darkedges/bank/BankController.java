@@ -26,6 +26,11 @@ public class BankController {
     private InvitationEmailService invitationEmail;
     @org.springframework.beans.factory.annotation.Autowired
     void setInvitationEmail(InvitationEmailService invitationEmail) { this.invitationEmail = invitationEmail; }
+    private DirectoryOutbox directory;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDirectory(DirectoryOutbox directory) { this.directory = directory; }
+    /** This attempt's person changed: their AuthStack user is brought up to date (AuthStackDirectory). In the change's own transaction. */
+    void directoryChanged(UUID attemptId) { if (directory != null) directory.changed(attemptId); }
     private String applicantEntry = "portal", applicantEntryUrl = "";
     @org.springframework.beans.factory.annotation.Autowired
     void setApplicantEntry(@Value("${bank.applicant-entry:portal}") String entry, @Value("${bank.applicant-entry-url:}") String url) { this.applicantEntry=entry; this.applicantEntryUrl=url; }
@@ -76,6 +81,8 @@ public class BankController {
     @GetMapping("/") String home() { return "home"; }
     @GetMapping({"/hr", "/hr/"}) String hires(Model m) { var rows=db.queryForList("select h.*, followup.id as next_hire_id from bank_hire h left join bank_hire followup on followup.previous_hire_id=h.id order by h.created_at desc");
         for(var h:rows) h.put("mismatch",h.get("verified_family")!=null && (!normalize((String)h.get("expected_given")).equals(normalize((String)h.get("verified_given"))) || !normalize((String)h.get("expected_family")).equals(normalize((String)h.get("verified_family"))) || !h.get("birth_date").equals(h.get("verified_birth"))));
+        // Whether the person's AuthStack user is up to date (only for current attempts, and only once the bank is connected).
+        if (directory != null) for (var h : rows) if (h.get("next_hire_id")==null) h.put("directory", directory.state((UUID) h.get("id")));
         m.addAttribute("hires",rows.stream().filter(h -> h.get("next_hire_id")==null).toList());
         m.addAttribute("hireHistory",rows.stream().filter(h -> h.get("next_hire_id")!=null).toList()); return "hr"; }
     @PostMapping("/hr/hires") @Transactional String create(@RequestParam String given, @RequestParam String family,
@@ -83,30 +90,40 @@ public class BankController {
         require(!family.isBlank() && InvitationEmailService.validAddress(email.trim()) && !department.isBlank() && birth.isBefore(LocalDate.now()),"Required hire details are invalid");
         UUID id=UUID.randomUUID(); String invitation=token();
         db.update("insert into bank_hire(id,expected_given,expected_family,birth_date,email,department,invite_hash,invite_expires) values (?,?,?,?,?,?,?,?)",id,given.trim(),family.trim(),birth,email.trim(),department.trim(),hash(invitation),java.sql.Timestamp.from(Instant.now().plus(Duration.ofDays(7))));
-        audit(id,"CREATED",actor.getName()); deliverInvitation(email.trim(),invitationLink(invitation),m); return "invitation";
+        audit(id,"CREATED",actor.getName()); directoryChanged(id); deliverInvitation(email.trim(),invitationLink(invitation),m); return "invitation";
     }
     @PostMapping("/hr/hires/{id}/invite") @Transactional String invite(@PathVariable UUID id, Model m, java.security.Principal actor) {
         String t=token(); require(db.update("update bank_hire set invite_hash=?, invite_expires=? where id=? and status in ('INVITED','REVIEW')",hash(t),java.sql.Timestamp.from(Instant.now().plus(Duration.ofDays(7))),id)==1,"Hire cannot be invited");
         audit(id,"INVITATION_REISSUED",actor.getName()); deliverInvitation((String)db.queryForMap("select email from bank_hire where id=?",id).get("email"),invitationLink(t),m); return "invitation";
     }
     @PostMapping("/hr/hires/{id}/reverify") @Transactional String reverify(@PathVariable UUID id, @RequestParam(defaultValue="false") boolean forcePassportCheck, Model model, java.security.Principal actor) {
+        var started = startReactivation(id, forcePassportCheck, actor.getName(), null, model);
+        // Repeated submissions return to the same request and leave its invitation valid.
+        return started.created() ? "invitation" : "redirect:/hr#hire-" + started.attemptId();
+    }
+    record Reactivation(UUID attemptId, boolean created) {}
+    /** Start a linked new attempt for a closed hire, and email its invitation. HR's page and the AuthStack console (DirectoryActionsController). */
+    @Transactional public Reactivation startReactivation(UUID id, boolean forcePassportCheck, String actor, String channel) {
+        return startReactivation(id, forcePassportCheck, actor, channel, new org.springframework.ui.ExtendedModelMap());
+    }
+    Reactivation startReactivation(UUID id, boolean forcePassportCheck, String actor, String channel, Model model) {
         var previous = db.queryForMap("select * from bank_hire where id=? for update", id);
         requireDecision(Set.of("REVOKED","INACTIVE","CANCELLED","REJECTED").contains(previous.get("status")), "Only a closed hire can be requested for verification again");
         var followups = db.queryForList("select id from bank_hire where previous_hire_id=?", id);
-        // Repeated submissions return to the same request and leave its invitation valid.
-        if (!followups.isEmpty()) return "redirect:/hr#hire-" + followups.getFirst().get("id");
+        if (!followups.isEmpty()) return new Reactivation((UUID) followups.getFirst().get("id"), false);
         UUID nextId = UUID.randomUUID();
         String invitation = token();
         db.update("insert into bank_hire(id,expected_given,expected_family,birth_date,email,department,invite_hash,invite_expires,previous_hire_id) values (?,?,?,?,?,?,?,?,?)",
                 nextId, previous.get("expected_given"), previous.get("expected_family"), previous.get("birth_date"), previous.get("email"), previous.get("department"), hash(invitation), java.sql.Timestamp.from(Instant.now().plus(Duration.ofDays(7))), id);
         if (forcePassportCheck) {
             db.update("update bank_hire set passport_check_after=? where id=?",java.sql.Timestamp.from(Instant.now()),nextId);
-            audit(nextId,"FRESH_PASSPORT_CHECK_REQUIRED",actor.getName());
+            audit(nextId,"FRESH_PASSPORT_CHECK_REQUIRED",actor,channel);
         }
-        audit(id, "VERIFICATION_REQUEST_REISSUED", actor.getName());
-        audit(nextId, "VERIFICATION_REQUESTED", actor.getName());
+        audit(id, "VERIFICATION_REQUEST_REISSUED", actor, channel);
+        audit(nextId, "VERIFICATION_REQUESTED", actor, channel);
+        directoryChanged(nextId);
         deliverInvitation((String)previous.get("email"), invitationLink(invitation), model);
-        return "invitation";
+        return new Reactivation(nextId, true);
     }
     String reverify(UUID id, Model model, java.security.Principal actor) { return reverify(id,false,model,actor); }
     Instant passportCheckAfter(UUID hire) {
@@ -119,17 +136,24 @@ public class BankController {
         catch(Exception invalid) { return false; }
     }
     @PostMapping("/hr/hires/{id}/decision") @Transactional String decision(@PathVariable UUID id,@RequestParam String decision,@RequestParam(defaultValue="") String reason,java.security.Principal actor) {
+        applyDecision(id, decision, reason, actor.getName(), null);
+        return "redirect:/hr";
+    }
+    /** A decision on one attempt, with the bank's rules. HR's page and, for revoke and deactivate, the AuthStack console (DirectoryActionsController). */
+    @Transactional public void applyDecision(UUID id, String decision, String reason, String actor, String channel) {
         var hire=db.queryForMap("select * from bank_hire where id=? for update",id);
         requireDecision(Set.of("approve","reject","cancel","deactivate","revoke").contains(decision),"Unknown decision");
         if ("revoke".equals(decision)) {
-            if ("REVOKED".equals(hire.get("status"))) return "redirect:/hr";
+            if ("REVOKED".equals(hire.get("status"))) return;
             // Serialize with issuance through the hire row lock. If issuance won
             // the race, withdrawing approval also blocks the newly active staff access.
             requireDecision(Set.of("APPROVED","ACTIVE").contains(hire.get("status")), "Only an approved hire can have approval revoked");
             requireDecision(!reason.isBlank(), "Enter a reason for revoking approval");
-            db.update("update bank_hire set status='REVOKED',revocation_reason=?,revoked_by=?,revoked_at=now() where id=?", reason.trim(), actor.getName(), id);
-            db.update("insert into bank_audit(hire_id,action,actor,reason) values (?,'APPROVAL_REVOKED',?,?)", id, actor.getName(), reason.trim());
-            return "redirect:/hr";
+            db.update("update bank_hire set status='REVOKED',revocation_reason=?,revoked_by=?,revoked_at=now() where id=?", reason.trim(), actor, id);
+            if (channel == null) db.update("insert into bank_audit(hire_id,action,actor,reason) values (?,'APPROVAL_REVOKED',?,?)", id, actor, reason.trim());
+            else db.update("insert into bank_audit(hire_id,action,actor,reason,channel) values (?,'APPROVAL_REVOKED',?,?,?)", id, actor, reason.trim(), channel);
+            directoryChanged(id);
+            return;
         }
         String completedState = switch (decision) {
             case "approve" -> "APPROVED";
@@ -138,7 +162,7 @@ public class BankController {
             default -> "INACTIVE";
         };
         // A retry must not overwrite the first review or append another audit event.
-        if (completedState.equals(hire.get("status")) || ("approve".equals(decision) && "ACTIVE".equals(hire.get("status")))) return "redirect:/hr";
+        if (completedState.equals(hire.get("status")) || ("approve".equals(decision) && "ACTIVE".equals(hire.get("status")))) return;
         String next;
         if(decision.equals("approve")) {
             requireDecision("REVIEW".equals(hire.get("status")),"A verified identity must be reviewed first");
@@ -146,8 +170,8 @@ public class BankController {
             requireDecision(!mismatch || !reason.isBlank(),"A mismatch requires an explanation"); next="APPROVED";
         } else if(decision.equals("deactivate")) { requireDecision("ACTIVE".equals(hire.get("status")),"Staff is not active"); next="INACTIVE"; }
         else { requireDecision(Set.of("INVITED","REVIEW").contains(hire.get("status")),"Hire is no longer awaiting a decision"); next=decision.equals("reject")?"REJECTED":"CANCELLED"; }
-        db.update("update bank_hire set status=?, decision_reason=?, reviewer=?, reviewed_at=now() where id=?",next,reason,actor.getName(),id);
-        audit(id,next,actor.getName()); return "redirect:/hr";
+        db.update("update bank_hire set status=?, decision_reason=?, reviewer=?, reviewed_at=now() where id=?",next,reason,actor,id);
+        audit(id,next,actor,channel); directoryChanged(id);
     }
     static final class HireDecisionException extends ResponseStatusException {
         HireDecisionException(String message) { super(HttpStatus.BAD_REQUEST, message); }
@@ -227,7 +251,7 @@ public class BankController {
         if(type.equals("passport")) {
             UUID hire=(UUID)tx.get("hire_id"); require(freshPassport(c,passportCheckAfter(hire)),"A fresh Passport check is required. Complete Identity Proofing again."); require(PassportEvidencePolicy.accepts(c),"Passport credential lacks acceptable proofing evidence or is expired"); require(!c.path("family_name").asText().isBlank() && !c.path("assurance_level").asText().isBlank(),"Missing identity or assurance");
             LocalDate birth=LocalDate.parse(c.path("birth_date").asText());
-            require(db.update("update bank_hire set verified_given=?,verified_family=?,verified_birth=?,holder_jwk=?,status='REVIEW' where id=? and status='INVITED'",c.path("given_name").asText(),c.path("family_name").asText(),birth,verified.holderKeyConfirmed().orElseThrow().toString(),hire)==1,"Hire is not awaiting identity"); audit(hire,"IDENTITY_PRESENTED","applicant");
+            require(db.update("update bank_hire set verified_given=?,verified_family=?,verified_birth=?,holder_jwk=?,status='REVIEW' where id=? and status='INVITED'",c.path("given_name").asText(),c.path("family_name").asText(),birth,verified.holderKeyConfirmed().orElseThrow().toString(),hire)==1,"Hire is not awaiting identity"); audit(hire,"IDENTITY_PRESENTED","applicant"); directoryChanged(hire);
         } else {
             require(base.equals(c.path("bank_id").asText()),"Wrong bank"); staff=UUID.fromString(c.path("staff_id").asText()); active(staff);
             var current=db.queryForMap("select issued_credential from bank_hire where id=?",staff);
@@ -272,5 +296,8 @@ public class BankController {
     void active(UUID id) { require(db.queryForObject("select count(*) from bank_hire h where h.id=? and h.status='ACTIVE' and not exists (select 1 from bank_hire newer where newer.previous_hire_id=h.id)",Integer.class,id)==1,"Staff access is inactive"); }
     @GetMapping({"/staff", "/staff/"}) String staff(HttpSession session,Model m) { require(session.getAttribute("staff")!=null,"Sign in with your staff credential"); UUID id=UUID.fromString(session.getAttribute("staff").toString()); active(id); m.addAttribute("hire",db.queryForMap("select * from bank_hire where id=?",id)); return "staff"; }
     void audit(UUID id,String action,String actor) { db.update("insert into bank_audit(hire_id,action,actor) values (?,?,?)",id,action,actor); }
-    void audit(UUID id,String action,String actor,String channel) { db.update("insert into bank_audit(hire_id,action,actor,channel) values (?,?,?,?)",id,action,actor,channel); }
+    void audit(UUID id,String action,String actor,String channel) {
+        if (channel == null) { audit(id,action,actor); return; }
+        db.update("insert into bank_audit(hire_id,action,actor,channel) values (?,?,?,?)",id,action,actor,channel);
+    }
 }

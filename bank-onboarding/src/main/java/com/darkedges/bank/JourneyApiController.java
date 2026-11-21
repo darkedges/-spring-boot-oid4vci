@@ -31,6 +31,10 @@ public class JourneyApiController {
     private final int staffStartsPerMinute;
     private final Map<String, Deque<Instant>> staffStarts = new ConcurrentHashMap<>();
 
+    private DirectoryOutbox directory;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDirectory(DirectoryOutbox directory) { this.directory = directory; }
+
     public JourneyApiController(JdbcTemplate db, BankController bank, @Value("${bank.journey.staff-sign-in-per-minute:60}") int staffStartsPerMinute) {
         this.db = db; this.bank = bank; this.staffStartsPerMinute = staffStartsPerMinute;
     }
@@ -128,7 +132,10 @@ public class JourneyApiController {
             // Checked again now, not only when the wallet presented: approval may have been revoked (or a newer attempt started) since.
             try { bank.active(staff); } catch (ResponseStatusException inactive) { throw new JourneyRefusal(HttpStatus.CONFLICT, "staff_inactive"); }
             bank.audit(staff, "STAFF_SIGN_IN", "staff", "authr");
-            return Map.of("staffSubject", staff.toString());
+            if (directory == null) return Map.of("staffSubject", staff.toString());
+            directory.changed(staff);
+            // The identity signed in is the PERSON (one AuthStack user across reactivations); StaffSignIn maps it back to the current attempt.
+            return Map.of("staffSubject", directory.personOf(staff).toString());
         }
         UUID hire = (UUID) tx.get("hire_id");
         return Map.of("stage", stage(hire));

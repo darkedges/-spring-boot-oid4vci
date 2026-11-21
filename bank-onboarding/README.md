@@ -229,6 +229,34 @@ kept, and it never grants HR access: the HR role comes only from the HR provider
 The values come from the authstack repo's `terraform/risk-e-bank` outputs: `bank_staff_env` and `staffPortalClientSecret`. To switch it off,
 remove `SPRING_PROFILES_ACTIVE`.
 
+## Staff in the AuthStack directory
+
+With `BANK_AUTHSTACK_*` set, every person HR hires gets a user in the bank's AuthStack environment, and the bank keeps it current.
+
+**One user per person.** A reactivation creates a new attempt, but the person keeps the same AuthStack user:
+- email `staff-<person id>@BANK_STAFF_EMAIL_DOMAIN`, where the person id is the first attempt's id;
+- `externalId` = the person id;
+- population "Staff";
+- the recruitment names, replaced by the Passport-verified names once approved.
+
+The user is **enabled only while the person is active staff**, and AuthStack refuses sign-in to a disabled user.
+
+**The bank's view of the person** is on the user, as the external identity `risk-e-bank` (`PUT /v1/environments/:env/users/:id/externalIdentities/risk-e-bank`):
+- lifecycle state and reason;
+- identity verification, including whether a fresh Passport check is required;
+- every attempt;
+- the staff credentials issued, each ACTIVE, SUPERSEDED, REVOKED, INACTIVE or EXPIRED;
+- last sign-in;
+- the operations the bank offers now.
+
+No credential, birth date or personal email is sent.
+
+**Every change is queued in `bank_directory_outbox`** in the same transaction: create, Passport presented, decisions, reactivation, issuance and staff sign-in. A scheduled job then sends the person's whole current state, retrying with backoff. HR's card shows `AuthStack: synced`, `pending` or `failed`.
+
+**The AuthStack console can revoke, deactivate and start a reactivation** on the person's page. AuthStack relays the administrator's choice to `POST /api/directory/v1/people/{personId}/actions`, with that administrator's own console token. The bank checks the token with AuthStack (`BANK_AUTHSTACK_CONSOLE_ME_URL`): an ADMIN or ORG_ADMIN whose organisation owns the bank's environment. It then applies the action with the same rules as HR's page, auditing it with channel `authstack`. Approving and rejecting stay with HR.
+
+**Staff sign-in names the person.** The bank maps that to the person's current attempt and requires it to be active. Identities created per attempt, before this change, still sign in.
+
 ## Validation limits
 
 Run module tests through Maven, wallet TypeScript checks, backend pytest, and the Android walkthrough. Provider registration, live PostgreSQL, and real-device acceptance require operator configuration. This implementation has not yet been validated against those live systems.
