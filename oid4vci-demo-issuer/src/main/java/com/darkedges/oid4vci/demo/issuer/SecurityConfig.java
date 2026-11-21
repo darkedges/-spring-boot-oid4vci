@@ -49,6 +49,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
+                // CORS for the AuthStack console's calls to the admin API (oid4vc.tenancy.admin.allowed-origins); none otherwise.
+                .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/.well-known/**", "/credential-offer/**", "/authorize", "/par", "/token", "/nonce",
@@ -67,6 +69,8 @@ public class SecurityConfig {
                         // chain must let it through to that check rather than to a bearer-token
                         // challenge it can never satisfy.
                         .requestMatchers("/proofing/result").permitAll()
+                        // The tenancy admin API (profile "tenancy"): it checks the AuthStack console token itself, with AuthStack.
+                        .requestMatchers("/admin/api/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> {})

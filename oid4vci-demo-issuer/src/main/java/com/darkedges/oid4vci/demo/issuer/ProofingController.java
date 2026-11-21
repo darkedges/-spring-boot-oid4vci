@@ -1,5 +1,10 @@
 package com.darkedges.oid4vci.demo.issuer;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import com.darkedges.oid4vci.issuer.web.IssuerContextResolver;
+import com.darkedges.oid4vci.issuer.PreAuthorizedCodeService;
+import com.darkedges.oid4vci.issuer.IssuerMetadataTemplates;
+import com.darkedges.oid4vci.issuer.IssuerContext;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadata;
 import com.darkedges.oid4vci.core.metadata.CredentialIssuerMetadataTemplate;
 import com.darkedges.oid4vci.core.offer.CredentialOffer;
@@ -67,10 +72,12 @@ public class ProofingController {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final ProofingSessionStore sessionStore;
-    private final PreAuthorizedCodeStore codeStore;
-    private final CredentialIssuerMetadataTemplate template;
+    private final PreAuthorizedCodeService codes;
+    private final IssuerMetadataTemplates templates;
     private final PassportClaimsMapper claimsMapper;
     private final ProofingProperties properties;
+    private final IssuerContextResolver issuers;
+    private final TenantProofingSettings tenantSettings;
     private final Clock clock;
 
     public ProofingController(
@@ -80,30 +87,49 @@ public class ProofingController {
             PassportClaimsMapper claimsMapper,
             ProofingProperties properties,
             Clock clock) {
+        this(sessionStore, new PreAuthorizedCodeService(codeStore, clock), IssuerMetadataTemplates.fixed(template, null), claimsMapper,
+                properties, IssuerContextResolver.SINGLE_TENANT, TenantProofingSettings.NONE, clock);
+    }
+
+    @Autowired
+    public ProofingController(
+            ProofingSessionStore sessionStore,
+            PreAuthorizedCodeService codes,
+            IssuerMetadataTemplates templates,
+            PassportClaimsMapper claimsMapper,
+            ProofingProperties properties,
+            IssuerContextResolver issuers,
+            TenantProofingSettings tenantSettings,
+            Clock clock) {
         this.sessionStore = sessionStore;
-        this.codeStore = codeStore;
-        this.template = template;
+        this.codes = codes;
+        this.templates = templates;
         this.claimsMapper = claimsMapper;
         this.properties = properties;
+        this.issuers = issuers;
+        this.tenantSettings = tenantSettings;
         this.clock = clock;
     }
 
     /** Starts a session. The Wallet keeps {@code retrieval_secret} and sends only {@code session_id}
      * onward to the proofing app. */
     @PostMapping(value = "/proofing/session", produces = MediaType.APPLICATION_JSON_VALUE)
-    public String createSession() {
+    public ResponseEntity<String> createSession(HttpServletRequest servletRequest) {
+        IssuerContext context = issuers.resolve(servletRequest);
+        if (!tenantSettings.enabled(context)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\":\"proofing_not_offered\"}");
+        }
         Instant now = clock.instant();
         sessionStore.evictExpired(now);
-
         ProofingSession session = ProofingSession.pending(
-                randomToken(), randomToken(), now.plus(properties.getSessionTtl()));
+                randomToken(), randomToken(), now.plus(properties.getSessionTtl()), context.tenantId());
         sessionStore.save(session);
 
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("session_id", session.id());
         body.put("retrieval_secret", session.retrievalSecret());
         body.put("expires_in", properties.getSessionTtl().toSeconds());
-        return body.toString();
+        return ResponseEntity.ok(body.toString());
     }
 
     /**
@@ -159,8 +185,10 @@ public class ProofingController {
             return badRequest("a supplied field could not be interpreted");
         }
 
-        String configurationId = properties.getCredentialConfigurationId();
-        CredentialIssuerMetadata metadata = template.resolve(RequestBaseUrl.resolve(servletRequest));
+        // The proofing service calls one platform endpoint for every tenant: what it produces belongs to the session's tenant.
+        IssuerContext sessionTenant = new IssuerContext(session.tenantId(), "");
+        String configurationId = tenantSettings.credentialConfigurationId(sessionTenant).orElse(properties.getCredentialConfigurationId());
+        CredentialIssuerMetadata metadata = templates.credentialIssuer(sessionTenant).resolve("https://issuer.invalid");
         if (!metadata.credentialConfigurationsSupported().containsKey(configurationId)) {
             // Caught here rather than at the Credential Endpoint, where it would surface to the user
             // as a failure at the very end of a passport read they cannot repeat cheaply.
@@ -170,7 +198,7 @@ public class ProofingController {
         }
 
         String code = randomToken();
-        codeStore.save(code, new PreAuthorizedCodeSession(
+        codes.offer(sessionTenant, code, new PreAuthorizedCodeSession(
                 List.of(configurationId),
                 Optional.empty(),
                 claims,
@@ -211,8 +239,8 @@ public class ProofingController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\":\"unknown_session\"}");
         }
         ProofingSession session = found.get();
-
-        if (!constantTimeEquals(session.retrievalSecret(), secret)) {
+        IssuerContext context = issuers.resolve(servletRequest);
+        if (!constantTimeEquals(session.retrievalSecret(), secret) || !session.tenantId().equals(context.tenantId())) {
             // 404 rather than 403: a wrong secret should not confirm that the id was real.
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("{\"error\":\"unknown_session\"}");
         }
@@ -224,7 +252,7 @@ public class ProofingController {
             // Built here, from this request. credential_issuer must be the address the Wallet
             // actually reached, which is knowable only now -- see ProofingSession's Javadoc.
             String configurationId = session.credentialConfigurationId().orElseThrow();
-            CredentialIssuerMetadata metadata = template.resolve(RequestBaseUrl.resolve(servletRequest));
+            CredentialIssuerMetadata metadata = templates.credentialIssuer(context).resolve(context.issuerIdentifier());
             CredentialOffer offer = new CredentialOffer(
                     metadata.credentialIssuer(),
                     List.of(configurationId),

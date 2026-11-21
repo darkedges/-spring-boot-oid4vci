@@ -1,5 +1,8 @@
 package com.darkedges.oid4vci.spring.boot.autoconfigure.tenancy;
 
+import org.springframework.core.env.Environment;
+import com.darkedges.oid4vci.spring.boot.autoconfigure.MdocIssuerKeyMaterial;
+import com.nimbusds.jose.jwk.ECKey;
 import com.darkedges.oid4vc.tenancy.TenantContext;
 import com.darkedges.oid4vc.tenancy.TenantRepository;
 import com.darkedges.oid4vc.tenancy.admin.TenantSettingsValidator;
@@ -54,8 +57,16 @@ public class Oid4vciIssuerTenancyAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public IssuerKeys issuerKeys(TenantRepository tenants, TenantKeyService keys) {
-        return new TenantIssuerKeys(tenants, keys);
+    public IssuerKeys issuerKeys(TenantRepository tenants, TenantKeyService keys, ObjectProvider<ECKey> applicationKey,
+                                 ObjectProvider<MdocIssuerKeyMaterial> applicationMdocKey, Environment environment) {
+        // The deployment's default tenant is the issuer that was single-tenant: it keeps signing with the application's keys
+        // (when it has them), which wallets and verifiers already trust. Every other tenant has its own.
+        ECKey signing = applicationKey.getIfAvailable();
+        String defaultTenant = environment.getProperty("oid4vc.tenancy.default-tenant.id");
+        if (signing == null || defaultTenant == null || defaultTenant.isBlank()) return new TenantIssuerKeys(tenants, keys);
+        MdocIssuerKeyMaterial mdoc = applicationMdocKey.getIfAvailable();
+        return new TenantIssuerKeys(tenants, keys, defaultTenant, IssuerKeys.fixed(signing,
+                mdoc == null ? null : new IssuerKeys.MdocSigningKey(mdoc.privateKey(), mdoc.certificateChain())));
     }
 
     @Bean

@@ -168,13 +168,16 @@
 </main>
 
 <script>
-  const originUrl = window.location.origin;
+  // On a path tenant (https://issuer.zkp.au/t/bank/) every call stays with that tenant: its identifier is origin + /t/bank, and
+  // its metadata is at the inserted well-known URL.
+  const tenantPrefix = (window.location.pathname.match(/^\/t\/[a-z0-9-]+/) || [''])[0];
+  const originUrl = window.location.origin + tenantPrefix;
   document.getElementById('issuerUrl').textContent = originUrl;
 
   async function loadMetadata() {
     const el = document.getElementById('configs');
     try {
-      const res = await fetch('/.well-known/openid-credential-issuer');
+      const res = await fetch('/.well-known/openid-credential-issuer' + tenantPrefix);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const meta = await res.json();
       const configs = meta.credential_configurations_supported || {};
@@ -206,7 +209,7 @@
     status.className = 'status';
     resultBox.style.display = 'none';
     try {
-      const res = await fetch('/demo/offer');
+      const res = await fetch(tenantPrefix + '/demo/offer');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const offer = await res.json();
       document.getElementById('offerJson').textContent = JSON.stringify(offer, null, 2);

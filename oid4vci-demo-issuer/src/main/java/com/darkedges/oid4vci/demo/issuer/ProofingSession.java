@@ -26,6 +26,9 @@ import java.util.Optional;
  * may register the same scheme — so the id must be treated as observable by an attacker. The secret
  * is returned only to the Wallet that created the session and never leaves it, so intercepting the
  * link yields something that cannot be redeemed.
+ *
+ * <p>{@code tenantId} is the tenant the Wallet started proofing with: the offer is that tenant's (its code is kept for that tenant
+ * only), and the session can be collected only there.
  */
 public record ProofingSession(
         String id,
@@ -34,7 +37,8 @@ public record ProofingSession(
         Optional<String> preAuthorizedCode,
         Optional<String> credentialConfigurationId,
         Optional<String> failureReason,
-        Instant expiresAt) {
+        Instant expiresAt,
+        String tenantId) {
 
     public enum Status {
         /** Created; the user is somewhere in the proofing app, or has abandoned it. */
@@ -62,6 +66,7 @@ public record ProofingSession(
         if (expiresAt == null) {
             throw new IllegalArgumentException("expiresAt is required");
         }
+        tenantId = tenantId == null || tenantId.isBlank() ? com.darkedges.oid4vci.issuer.IssuerContext.DEFAULT_TENANT : tenantId;
         if (status == Status.READY && (preAuthorizedCode.isEmpty() || credentialConfigurationId.isEmpty())) {
             throw new IllegalArgumentException(
                     "a READY session must carry a pre-authorized code and a configuration id");
@@ -69,20 +74,24 @@ public record ProofingSession(
     }
 
     public static ProofingSession pending(String id, String retrievalSecret, Instant expiresAt) {
+        return pending(id, retrievalSecret, expiresAt, null);
+    }
+
+    public static ProofingSession pending(String id, String retrievalSecret, Instant expiresAt, String tenantId) {
         return new ProofingSession(
-                id, retrievalSecret, Status.PENDING, Optional.empty(), Optional.empty(), Optional.empty(), expiresAt);
+                id, retrievalSecret, Status.PENDING, Optional.empty(), Optional.empty(), Optional.empty(), expiresAt, tenantId);
     }
 
     public ProofingSession ready(String preAuthorizedCode, String credentialConfigurationId) {
         return new ProofingSession(
                 id, retrievalSecret, Status.READY, Optional.of(preAuthorizedCode),
-                Optional.of(credentialConfigurationId), Optional.empty(), expiresAt);
+                Optional.of(credentialConfigurationId), Optional.empty(), expiresAt, tenantId);
     }
 
     public ProofingSession failed(String reason) {
         return new ProofingSession(
                 id, retrievalSecret, Status.FAILED, Optional.empty(), Optional.empty(),
-                Optional.of(reason), expiresAt);
+                Optional.of(reason), expiresAt, tenantId);
     }
 
     public boolean isExpired(Instant now) {

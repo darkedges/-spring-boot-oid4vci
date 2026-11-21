@@ -251,6 +251,23 @@ One issuer deployment can serve many tenants, one per AuthStack environment, thr
 A path tenant's metadata is at the inserted well-known URL, such as `/.well-known/openid-credential-issuer/t/bank`. Without
 `oid4vc.tenancy.enabled=true`, an issuer is single-tenant, exactly as before.
 
+**The demo issuer** turns this on with profiles. Its default profile is unchanged and single-tenant.
+- **`tenancy`:** serves every tenant.
+  - **The `zkp` tenant** is the issuer as it was. It is served on the platform origins themselves (`https://issuer.zkp.au`) and keeps
+    signing with the demo's own keys, so wallets and verifiers that trust them keep working.
+  - **Other tenants** sign with keys of their own.
+  - **Proofing:** a Wallet starts proofing at its tenant and collects the offer there. The proofing service still calls the single
+    `/proofing/result` endpoint with the platform's secret, and the session it names says which tenant the result is for. A tenant's
+    `settings.proofing` (`enabled`, `credentialConfigurationId`) tailors proofing for that tenant.
+  - **Configuration:** see `application-tenancy.yml` for the environment variables (AuthStack, the platform worker, the CA, and the
+    admin API for the console).
+- **`postgres`:** keeps tenants, their keys, the issuer's state and proofing sessions in PostgreSQL. See `application-postgres.yml` for
+  `ISSUER_DATABASE_*`, `TENANT_KEY_ENCRYPTION_KEY` and `ISSUER_STORE_ENCRYPTION_KEY`.
+
+```
+SPRING_PROFILES_ACTIVE=cloudflare,tenancy,postgres
+```
+
 **How it works.**
 - **`IssuerContext`:** each request's tenant and Credential Issuer Identifier. `IssuerContextResolver` resolves it from the request,
   in place of `RequestBaseUrl`.

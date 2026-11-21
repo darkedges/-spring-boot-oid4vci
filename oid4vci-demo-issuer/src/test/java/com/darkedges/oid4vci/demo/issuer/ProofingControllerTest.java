@@ -79,7 +79,7 @@ class ProofingControllerTest {
     }
 
     private String startSession() throws Exception {
-        return MAPPER.readTree(controller.createSession()).get("session_id").asText();
+        return MAPPER.readTree(controller.createSession(servletRequest()).getBody()).get("session_id").asText();
     }
 
     private String secretFor(String createSessionBody) throws Exception {
@@ -88,7 +88,7 @@ class ProofingControllerTest {
 
     @Test
     void issuesASessionIdAndARetrievalSecretThatDiffer() throws Exception {
-        JsonNode body = MAPPER.readTree(controller.createSession());
+        JsonNode body = MAPPER.readTree(controller.createSession(servletRequest()).getBody());
 
         assertThat(body.get("session_id").asText()).isNotBlank();
         assertThat(body.get("retrieval_secret").asText()).isNotBlank();
@@ -133,7 +133,7 @@ class ProofingControllerTest {
 
     @Test
     void mintsAnOfferCarryingTheProofedIdentity() throws Exception {
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
 
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
@@ -162,7 +162,7 @@ class ProofingControllerTest {
         // it -- taking it from the callback would hand a phone an in-cluster name it cannot reach.
         //
         // Every other test here used one address for both, so this passed locally while being wrong.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
 
         controller.receiveResult(
@@ -179,7 +179,7 @@ class ProofingControllerTest {
     void deliversTheOfferAsJsonRatherThanAnEncodedString() throws Exception {
         // Built as a node, not spliced in as text: handing the Wallet a JSON string containing JSON
         // is something its parser accepts and then fails to navigate.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
 
@@ -191,7 +191,7 @@ class ProofingControllerTest {
 
     @Test
     void doesNotHandTheOfferToACallerWithoutTheRetrievalSecret() throws Exception {
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
 
@@ -206,7 +206,7 @@ class ProofingControllerTest {
     void doesNotConfirmThatAnIdWasRealWhenTheSecretIsWrong() throws Exception {
         // Same 404 for a wrong secret as for an unknown id, so polling cannot be used to discover
         // which session ids exist.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
 
         ResponseEntity<String> wrongSecret = controller.pollSession(sessionId, "guessed", servletRequest());
@@ -220,7 +220,7 @@ class ProofingControllerTest {
     void doesNotMintAnOfferForAResultThatDidNotPass() throws Exception {
         // The proofing service is only supposed to call on success, but the issuer decides what it
         // issues. Trusting the caller's judgement would put this issuer's policy in another codebase.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest failed = new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
@@ -237,7 +237,7 @@ class ProofingControllerTest {
     void refusesAResultWhoseFaceCameFromTheDeviceRatherThanTheChip() throws Exception {
         // Without portraitFromChip the match score describes a picture the device chose, so a genuine
         // passport could be paired with somebody else's selfie and still score perfectly.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest deviceSuppliedFace = new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
@@ -253,7 +253,7 @@ class ProofingControllerTest {
     void treatsAnUndeterminedChainCheckAsNotProved() throws Exception {
         // null is "never ran". It must not read as a pass -- Boolean.TRUE.equals is what makes that so,
         // and a primitive boolean here would have quietly turned every unknown into false anyway.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest unknownChain = new ProofingResultRequest(
                 sessionId, "ALEXANDRA JANE", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
@@ -269,7 +269,7 @@ class ProofingControllerTest {
     void doesNotMintASecondOfferForAReplayedCallback() throws Exception {
         // A replayed callback must not overwrite an offer still waiting to be collected, or one
         // proofing run yields two credentials.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
 
@@ -304,7 +304,7 @@ class ProofingControllerTest {
     void acceptsAMononymousHolder() throws Exception {
         // ICAO 9303 allows a document with a primary identifier and no given names. Rejecting those
         // would be a bug affecting exactly the people least able to work around it.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         ProofingResultRequest mononymous = new ProofingResultRequest(
                 sessionId, "", "FITZGERALD", "870314", "PA1234567", "GBR", "GBR", "310612",
@@ -320,7 +320,7 @@ class ProofingControllerTest {
     void forgetsASessionOnceItHasExpired() throws Exception {
         // The session holds a Credential Offer whose code still points at real passport claims, so an
         // abandoned one must not linger for the life of the process.
-        String created = controller.createSession();
+        String created = controller.createSession(servletRequest()).getBody();
         String sessionId = MAPPER.readTree(created).get("session_id").asText();
         controller.receiveResult(SECRET, passingResultFor(sessionId), servletRequest());
 
